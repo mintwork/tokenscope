@@ -66,7 +66,7 @@ Every finding comes with an estimated dollar cost and a one-line fix.
 
 ![tokenscope HTML report: estimated waste by pattern with fixes, plus a flame graph of token spend](docs/demo.png)
 
-<sub>Screenshot generated from synthetic logs (`npm run demo:png`). Open <a href="docs/demo-report.html">docs/demo-report.html</a> for the interactive version.</sub>
+<sub>Screenshot generated from synthetic logs (`npm run demo:png`). Open the <a href="https://ranjan-mohanty.github.io/tokenscope/demo-report.html">interactive demo report</a>.</sub>
 
 ## How waste is estimated
 
