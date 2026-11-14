@@ -106,16 +106,24 @@ describe('cached feed precedence', () => {
 describe('--update-pricing against a local server (no real network)', () => {
   let server: Server;
   let base = '';
-  const routes = new Map<string, () => { status: number; body: string }>([
-    ['/good.json', () => ({ status: 200, body: JSON.stringify(newer()) })],
-    ['/bad.json', () => ({ status: 200, body: JSON.stringify({ ...newer(), defaults: {} }) })],
-    ['/garbage.json', () => ({ status: 200, body: '<html>rate limited</html>' })],
-    ['/huge.json', () => ({ status: 200, body: ' '.repeat(1024 * 1024 + 10) })],
-  ]);
+  // static routes (no lookup by the request URL, so nothing is dispatched on user input)
+  const respond = (url: string | undefined): { status: number; body: string } => {
+    switch (url) {
+      case '/good.json':
+        return { status: 200, body: JSON.stringify(newer()) };
+      case '/bad.json':
+        return { status: 200, body: JSON.stringify({ ...newer(), defaults: {} }) };
+      case '/garbage.json':
+        return { status: 200, body: '<html>rate limited</html>' };
+      case '/huge.json':
+        return { status: 200, body: ' '.repeat(1024 * 1024 + 10) };
+      default:
+        return { status: 404, body: 'not found' };
+    }
+  };
   beforeAll(async () => {
     server = createServer((req, res) => {
-      const route = routes.get(req.url ?? '');
-      const r = route ? route() : { status: 404, body: 'not found' };
+      const r = respond(req.url);
       res.writeHead(r.status, { 'content-type': 'application/json' });
       res.end(r.body);
     });
