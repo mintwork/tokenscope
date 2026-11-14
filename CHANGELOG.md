@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-14
+
+### Changed
+
+- README badges consolidated into one row; the npm downloads badge is removed until npm reports
+  download counts for the new package (it showed "package not found or too new").
+- Published from CI with npm trusted publishing (OIDC); no npm token is stored.
+
 ## [0.1.0] - 2026-11-14
 
 First public release.
@@ -32,4 +40,5 @@ First public release.
 - `FORCE_COLOR` forces ANSI colors when stdout is not a TTY; `COLUMNS` sets the width when it is not a terminal.
 - Zero runtime dependencies, Node 22+, 100% local: no network requests, no telemetry.
 
+[0.1.1]: https://github.com/mintwork/tokenscope/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mintwork/tokenscope/releases/tag/v0.1.0
