@@ -76,6 +76,7 @@ fixture-driven test.
    gh release create v0.2.0 --title "tokenscope v0.2.0" --notes-file docs/release-notes-v0.2.0.md
    ```
 
-**npm auth:** the workflow uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
-(configure `mintwork/tokenscope` + `release.yml` on the package's npm settings page), or an
-`NPM_TOKEN` repository secret as a fallback. A version already on npm is skipped.
+**npm auth:** [trusted publishing](https://docs.npmjs.com/trusted-publishers) only; no npm token
+is stored in the repository. npm accepts publishes of this package only from `release.yml` in
+`mintwork/tokenscope` (set under the package's Settings → Trusted Publisher on npmjs.com). A version
+already on npm is skipped, and manual runs of the workflow are dry runs.
