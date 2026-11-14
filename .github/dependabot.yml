@@ -12,6 +12,11 @@ updates:
       dependencies:
         dependency-type: production
         update-types: [minor, patch]
+    ignore:
+      # Keep Node typings at the minimum supported version (engines: >=22), so the
+      # compiler flags Node APIs that don't exist on Node 22.
+      - dependency-name: "@types/node"
+        versions: [">=23"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
