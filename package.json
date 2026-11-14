@@ -1,0 +1,48 @@
+{
+  "name": "tokenscope",
+  "version": "0.1.0",
+  "description": "Where did my tokens go? A zero-dependency cost & token profiler for AI coding agents (Claude Code, Codex CLI).",
+  "type": "module",
+  "bin": {
+    "tokenscope": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "npm run build && node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "demo": "npm run build && node scripts/gen-demo.mjs .demo/projects && node dist/cli.js --dir .demo/projects --source claude-code --html docs/demo-report.html",
+    "prepublishOnly": "npm run build && npm test",
+    "smoke": "node dist/cli.js --dir test/fixtures/claude/projects --codex-dir test/fixtures/codex/sessions --no-color"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "ai-agent",
+    "tokens",
+    "cost",
+    "profiler",
+    "llm",
+    "anthropic",
+    "openai",
+    "flamegraph",
+    "cli"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

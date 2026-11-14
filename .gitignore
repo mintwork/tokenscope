@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+# generated reports (may contain private prompts / paths)
+tokenscope-report*.html
+tokenscope*.json
+!docs/demo-report.html
+.demo/
