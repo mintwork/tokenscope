@@ -64,3 +64,18 @@ fixture-driven test.
 
 - `npm run typecheck && npm test` must pass.
 - Keep PRs focused, and include a screenshot when you change the HTML report.
+
+## Releasing
+
+1. Bump `version` in `package.json`, update `CHANGELOG.md`, add `docs/release-notes-vX.Y.Z.md`,
+   commit and push.
+2. Create the release; the [release workflow](.github/workflows/release.yml) checks that the tag
+   matches `package.json`, runs the typecheck and tests, and publishes to npm with provenance:
+
+   ```bash
+   gh release create v0.2.0 --title "tokenscope v0.2.0" --notes-file docs/release-notes-v0.2.0.md
+   ```
+
+**npm auth:** the workflow uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
+(configure `ranjan-mohanty/tokenscope` + `release.yml` on the package's npm settings page), or an
+`NPM_TOKEN` repository secret as a fallback. A version already on npm is skipped.

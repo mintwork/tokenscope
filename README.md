@@ -10,6 +10,13 @@
 
 Zero dependencies · runs 100% locally · Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more · MIT
 
+[![CI](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml/badge.svg)](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/tokenscope?color=cb3837&logo=npm)](https://www.npmjs.com/package/tokenscope)
+[![npm downloads](https://img.shields.io/npm/dm/tokenscope?color=cb3837)](https://www.npmjs.com/package/tokenscope)
+[![node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](package.json)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/ranjan-mohanty/tokenscope?style=social)](https://github.com/ranjan-mohanty/tokenscope/stargazers)
+
 ![npx tokenscope in a terminal: estimated waste first, with a fix for each finding, then spend by project, model, session and tool](docs/demo.gif)
 
 <sub>Recorded from the real CLI on synthetic logs (`npm run demo:gif`).</sub>
