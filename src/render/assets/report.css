@@ -171,7 +171,7 @@ footer a { color: var(--ink-2); }
 }
 
 /* waste overview */
-.wrow { display: grid; grid-template-columns: 210px 1fr 110px; gap: 14px; align-items: center; padding: 8px 0 2px; }
+.wrow { display: grid; grid-template-columns: 210px 1fr 190px; gap: 14px; align-items: center; padding: 8px 0 2px; }
 .wname { font-weight: 600; font-size: 13.5px; }
 .wbar { height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .wbar div { height: 100%; border-radius: 4px; }

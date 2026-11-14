@@ -81,12 +81,18 @@ export function renderTerminal(r: Report, o: TermOptions): string {
   if (!anyChecked) {
     line(p.yellow(`Waste could not be estimated: these logs don't record the data the detectors need (see "Waste checks" below).`));
   } else if (r.findings.length) {
-    const share = t.cost ? ` of ${usd(t.cost)} spent (${pct(t.wasteCost / t.cost, 0)})` : '';
-    line(`${p.bold(p.orange(`≈ ${usd(t.wasteCost)}`))} ${p.bold('looks wasted')}${p.dim(share)}`);
-    line(p.dim(`  ${usd(t.avoidableCost)} avoidable (same work redone) + ${usd(t.likelyAvoidableCost)} likely avoidable (cache rebuilds after breaks, huge outputs) · estimates`));
+    const share = t.cost ? ` of ${usd(t.cost)} spent (${pct(t.avoidableCost / t.cost, 1)})` : '';
+    line(`${p.bold(p.orange(`≈ ${usd(t.avoidableCost)}`))} ${p.bold('could have been saved')}${p.dim(share)}`);
+    line(p.dim(`  realistic savings only: repeated work + the net gain of a 1-hour cache TTL · estimates`));
+    if (t.likelyAvoidableCost >= 0.01) line(p.dim(`  + up to ${usd(t.likelyAvoidableCost)} more, likely avoidable (mid-session prompt changes, model switches, huge outputs)`));
   } else {
     line(p.green(`No waste patterns found in ${usd(t.cost)} of spend. Nice.`));
   }
+  const ttlSaved = r.findings.filter((f) => f.cause === 'pause' || f.cause === 'tool-wait').reduce((n, f) => n + f.cost, 0);
+  if (ttlSaved > 0)
+    line(p.dim(`  1-hour cache TTL: ${usd(ttlSaved)} net in the sessions that would gain; turned on everywhere it nets ${t.ttlGlobalNet >= 0 ? usd(t.ttlGlobalNet) : '-' + usd(-t.ttlGlobalNet)} (the 1h write premium applies to every session)`));
+  if (t.unavoidableRebuilds)
+    line(p.dim(`  not counted: ${t.unavoidableRebuilds} cache rebuild${t.unavoidableRebuilds > 1 ? 's' : ''} after breaks over an hour (${usd(t.unavoidableRebuildCost)}) - no cache lives that long; a fresh session helps only if you start an unrelated task`));
   if (anyChecked && t.partiallyCheckedSessions)
     line(p.dim(`  ${t.partiallyCheckedSessions} of ${t.sessions} sessions could only be partly checked (missing data, see below) - real waste may be higher.`));
 

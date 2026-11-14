@@ -17,7 +17,7 @@ function embed(r: Report): string {
 const LOGO = `<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#3987e5"/><rect x="5" y="7" width="22" height="4" rx="2" fill="#fff"/><rect x="5" y="13" width="14" height="4" rx="2" fill="#fff" opacity=".85"/><rect x="20" y="13" width="7" height="4" rx="2" fill="#fff" opacity=".6"/><rect x="5" y="19" width="8" height="4" rx="2" fill="#fff" opacity=".7"/><rect x="14" y="19" width="4" height="4" rx="2" fill="#fff" opacity=".5"/><rect x="5" y="25" width="4" height="2" rx="1" fill="#fff" opacity=".5"/></svg>`;
 
 export function renderHtml(r: Report): string {
-  const title = `tokenscope · ≈${usd(r.totals.wasteCost)} wasted of ${usd(r.totals.cost)}`;
+  const title = `tokenscope · ≈${usd(r.totals.avoidableCost)} could have been saved of ${usd(r.totals.cost)}`;
   return `<!doctype html>
 <html lang="en" data-theme="dark">
 <head>

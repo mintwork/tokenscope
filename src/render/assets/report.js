@@ -52,8 +52,9 @@
     allUnchecked
       ? { cls: 'hero', label: 'Estimated waste', value: 'n/a', sub: 'these logs lack the data waste detectors need' }
       : {
-          cls: 'hero warn', label: 'Looks wasted (est.)', value: usd(T.wasteCost),
-          sub: (T.cost ? pct(T.wasteCost / T.cost, 0) + ' of ' + usd(T.cost) + ' · ' : '') + usd(T.avoidableCost) + ' avoidable + ' + usd(T.likelyAvoidableCost) + ' likely avoidable',
+          cls: 'hero warn', label: 'Could have been saved (est.)', value: usd(T.avoidableCost),
+          sub: (T.cost ? pct(T.avoidableCost / T.cost, 1) + ' of ' + usd(T.cost) + ' · ' : '') + '+ up to ' + usd(T.likelyAvoidableCost) + ' likely avoidable' +
+            (T.unavoidableRebuilds ? ' · ' + T.unavoidableRebuilds + ' rebuilds after >1h breaks (' + usd(T.unavoidableRebuildCost) + ') not counted' : ''),
         },
     { label: 'Total spend', value: usd(T.cost), sub: tok(T.tokens) + ' tokens' },
     { label: 'Sessions', value: T.sessions.toLocaleString('en-US'), sub: T.subagents ? '+' + T.subagents + ' subagents' : T.turns + ' turns' },
@@ -407,8 +408,9 @@
   function renderWasteOverview() {
     var by = {};
     R.findings.forEach(function (f) {
-      var b = by[f.kind] || (by[f.kind] = { n: 0, cost: 0, tips: {}, likely: f.certainty === 'likely-avoidable' });
+      var b = by[f.kind] || (by[f.kind] = { n: 0, cost: 0, likelyCost: 0, tips: {}, likely: true });
       b.n++; b.cost += f.cost;
+      if (f.certainty === 'likely-avoidable') b.likelyCost += f.cost; else b.likely = false;
       // one tip per cache-rebuild cause, one per other kind (agents differ only in the instructions file name)
       var key = f.kind === 'cache-miss' ? f.cause : 'k';
       var cur = b.tips[key];
@@ -420,7 +422,7 @@
       var b = by[k];
       var cov = R.coverage.map(function (c) { return c.detectors.find(function (d) { return d.kind === k; }); });
       var none = cov.every(function (d) { return d && d.status === 'no'; });
-      var value = b ? usd(b.cost) : none ? 'not checked' : '$0.00';
+      var value = b ? usd(b.cost - b.likelyCost) + (b.likelyCost >= 0.01 ? ' <span class="d">+ ' + usd(b.likelyCost) + ' likely</span>' : '') : none ? 'not checked' : '$0.00';
       return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + (b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'logs lack the data' : 'none found') + '</div></div>' +
         '<div class="wbar"><div style="width:' + (b ? Math.max(1, (b.cost / max) * 100) : 0) + '%;background:var(' + KIND_COLOR[k] + ')"></div></div><div class="num"><b>' + value + '</b></div></div>' +
         (b ? Object.keys(b.tips).map(function (k) { return b.tips[k]; }).sort(function (x, y) { return y.cost - x.cost; }).slice(0, 2).map(function (t) { return '<div class="wtip">↳ ' + esc(t.tip) + '</div>'; }).join('') : '');

@@ -20,7 +20,7 @@ Zero dependencies · runs 100% locally · Claude Code, Codex, Gemini CLI, OpenCo
 
 You know the bill. You don't know which part was **wasted**:
 
-- 264 prompt-cache rebuilds because you came back from lunch to a 500k-token session, each one re-written at cache-*write* price
+- your prompt cache expiring every time you spend 10 minutes reading the agent's answer, so a 500k-token context is re-written at cache-*write* price instead of read at cache-*read* price
 - the agent running `npm test` five times in a row and getting the same failure back every time
 - the same 2,000-line file read 40 times without anyone editing it
 - a 60k-token log `cat`-ed into context, then paid for again on every later request
@@ -40,17 +40,34 @@ Needs Node 20+ (22.13+ to read OpenCode's SQLite database). No configuration, no
 
 Every finding comes with an estimated dollar cost and a one-line fix.
 
-| Pattern | What it means | Typical fix | Certainty |
+| Pattern | What it means | Fix it suggests | Counted in headline? |
 |---|---|---|---|
-| **Cache rebuilds** | The whole context was re-sent at cache-write (or full input) price instead of cache-read price. tokenscope says why: an idle gap longer than the cache TTL, a model switch, or a changed prompt prefix. | `/clear` or start a fresh session after breaks longer than 5 min, or use a 1-hour cache TTL. Don't edit `CLAUDE.md` or toggle MCP servers mid-session. | *likely avoidable* |
-| **Loops** | The same tool called with the same input **and the same result**, several times in a row. | Interrupt early. Add a rule to `CLAUDE.md` / `AGENTS.md`: "if a command fails the same way twice, stop and ask". | avoidable |
-| **Repeated calls** | Identical call, identical answer, scattered through a session. | Tell the agent to reuse earlier results, or note slow-changing facts in the project instructions file. | avoidable |
-| **Unchanged re-reads** | The same file (same range) read again with no edit in between. | Put the key facts about the file in `CLAUDE.md` / `AGENTS.md`, or read a line range. | avoidable |
-| **Huge tool outputs** | A single tool result above 10k tokens (configurable), carried by every later request. | `head`, `grep`, `--limit`. Add "never cat logs or lockfiles" to the instructions file. | *likely avoidable* |
+| **Cache rebuilds while you read/reply** | A gap of 5-60 min after the agent's answer (you were reading or thinking) outlived the 5-minute cache TTL, so the whole context was re-written. | Turn on the 1-hour cache TTL (Claude Code: `"promptCacheTtl": "1h"` in `~/.claude/settings.json`). Only suggested when it nets a saving. **Never** `/clear`, which would lose the context and cost about the same to rebuild. | ✅ net saving of the 1h TTL |
+| **Cache rebuilds while the agent waited on a tool** | A tool call (or your approval) took 5-60 min and the cache expired. tokenscope names the tool and command, e.g. `Bash(npm run build) 12 min`. | Run long commands in the background (Claude Code: `run_in_background`, `/tasks`), or use the 1-hour TTL. | ✅ net saving of the 1h TTL |
+| **Loops** | The same tool called with the same input **and the same result**, several times in a row. | Interrupt early. Add a rule to `CLAUDE.md` / `AGENTS.md`: "if a command fails the same way twice, stop and ask". | ✅ |
+| **Repeated calls** | Identical call, identical answer, scattered through a session. | Tell the agent to reuse earlier results, or note slow-changing facts in the instructions file. | ✅ |
+| **Unchanged re-reads** | The same file (same range) read again with no edit in between. | Put the key facts in `CLAUDE.md` / `AGENTS.md`, or read a line range. | ✅ |
+| **Mid-session prompt changes / model switches** | The cache was rebuilt with no idle gap: instructions or tools changed, compaction ran, or the model switched. | Don't edit instructions or toggle MCP servers mid-session; stick to one model. | ➖ shown separately as *likely avoidable* |
+| **Huge tool outputs** | A single tool result above 10k tokens (configurable), carried by every later request. | `head`, `grep`, `--limit`; "never cat logs or lockfiles". | ➖ shown separately as *likely avoidable* |
+| **Rebuilds after breaks over an hour** | No cache lives that long. | None needed. A fresh session helps only if you're starting an unrelated task. | ❌ not waste, shown for context |
 
-**These are estimates, and the report says so.** Avoidable tokens are priced at what it cost to add them to the context once, plus the cache reads every later request paid to carry them. Some waste is arguable: you may have *wanted* that coffee break. That's why cache rebuilds after breaks and huge outputs are labelled **likely avoidable**, and kept separate from clear-cut repeats.
+**Plus the spend side:** cost per session, project, model, day and tool, cache hit rate, how much caching saved you, and a **flame graph** (project → session → turn → API call → subagent) you can click to zoom.
 
-Then the spend side: cost per session, project, model, day and tool, cache hit rate, how much caching saved you, and a **flame graph** (project → session → turn → API call → subagent) you can click to zoom.
+## How waste is estimated
+
+Every number is a **counterfactual**: what the same work would have cost if one specific thing had been done differently, priced with the same table as your spend. tokenscope never counts the full cost of a request as waste; it counts only the difference.
+
+- **Cache rebuilds (5-60 min gaps):** the counterfactual is *this whole session on a 1-hour cache TTL*. In that world:
+  - each rebuild after a 5-60 min gap becomes a cache read of the context it carried over (new content is still written);
+  - but **every** cache write in the session pays the 1h price (2× base input instead of 1.25×).
+
+  The finding is `actual cache cost − counterfactual cache cost`, computed per session (each subagent separately). If the premium outweighs the savings, there is no finding and no recommendation. The terminal also shows what the setting would net if you turned it on for *every* session, including those that would only pay the premium.
+- **Gaps over an hour** are beyond any TTL. They're listed as unavoidable and never added to waste.
+- **Rebuilds with no gap** (prompt prefix changed, model switched): the tokens carried over from the previous request × (write price − read price). These are only *likely* avoidable, because compaction or a deliberate model switch may have been worth it, so they're kept out of the headline.
+- **Loops:** the cost of the repeated round trips after the first (their share of each request).
+- **Repeats, unchanged re-reads, huge outputs:** the avoidable tokens (output size ÷ 4) × the price of adding them to the context once, plus the cache reads every later request in that context paid to carry them. Re-reads only count when the file wasn't edited in between and the same range was read.
+
+The headline (**"could have been saved"**) is the sum of the ✅ rows only. The likely-avoidable amount is shown next to it, never added in. Each detector only runs on agents whose logs contain the data it needs; anything else is reported as *not checked*, never as $0.
 
 ## tokenscope vs ccusage
 
@@ -62,8 +79,8 @@ Then the spend side: cost per session, project, model, day and tool, cache hit r
 | Daily / monthly / session spend | ✅ excellent | ✅ |
 | Agents supported | ~19 | 12 (see below) |
 | Live status line, billing blocks | ✅ | ❌ |
-| Waste detection (cache rebuilds, loops, re-reads, giant outputs) | ❌ | ✅ with $ estimates and fixes |
-| Why a cache miss happened (idle gap / model switch / prefix change) | ❌ | ✅ |
+| Waste detection (cache rebuilds, loops, re-reads, giant outputs) | ❌ | ✅ with counterfactual $ estimates and fixes |
+| Why a cache miss happened (you paused / long tool / prefix change / model switch) | ❌ | ✅ |
 | Flame graph down to individual tool calls | ❌ | ✅ |
 | Subagent cost attributed to the call that spawned it | ❌ | ✅ |
 | Says which checks it could run per agent | n/a | ✅ never reports $0 waste for missing data |
