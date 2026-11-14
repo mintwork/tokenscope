@@ -1,0 +1,22 @@
+tokenscope
+Copyright (c) 2026 tokenscope contributors. Licensed under the MIT License (see LICENSE).
+
+Acknowledgements
+----------------
+tokenscope's parsers for agents other than Claude Code were written from each
+agent's own open-source code and documentation, and cross-checked against how
+these MIT-licensed projects read the same files. No source code was copied from
+them; all tokenscope parsers are independent TypeScript implementations.
+
+- ccusage - Copyright (c) 2025 ryoppippi - MIT License - https://github.com/ccusage/ccusage
+  Log locations and field semantics for Codex, Gemini CLI, Qwen Code, OpenCode,
+  Kilo, Cline, Copilot CLI, Factory Droid and Amp. The `codex-auto-review` model
+  alias date table in src/parsers/codex.ts follows ccusage's published fallback table.
+- better-ccusage - Copyright (c) 2025 ryoppippi - MIT License - https://github.com/cobra91/better-ccusage
+  Factory Droid and OpenCode (node:sqlite read-only access) adapters.
+- splitrail - Copyright (c) 2025 Piebald LLC - MIT License - https://github.com/Piebald-AI/splitrail
+  Analyzers for Codex, Gemini CLI, Qwen Code, OpenCode, Cline, Roo Code, Kilo Code and Copilot CLI.
+
+Agent sources consulted (formats only): openai/codex, google-gemini/gemini-cli,
+QwenLM/qwen-code, sst/opencode, cline/cline, RooCodeInc/Roo-Code, Kilo-Org/kilocode,
+github/copilot-sdk.

@@ -1,7 +1,7 @@
 {
   "name": "tokenscope",
   "version": "0.1.0",
-  "description": "Where did my tokens go? A zero-dependency cost & token profiler for AI coding agents (Claude Code, Codex CLI).",
+  "description": "Find the money your AI coding agent wasted: cache rebuilds, loops, re-reads and giant tool outputs, with fixes, plus a flame graph of token spend. Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more. Zero dependencies, 100% local.",
   "type": "module",
   "bin": {
     "tokenscope": "dist/cli.js"
@@ -11,7 +11,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=20"
@@ -22,22 +23,34 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "demo": "npm run build && node scripts/gen-demo.mjs .demo/projects && node dist/cli.js --dir .demo/projects --source claude-code --html docs/demo-report.html",
+    "demo": "npm run build && node scripts/gen-demo.mjs .demo/projects && node dist/cli.js --dir .demo/projects --path codex=test/fixtures/codex/sessions/2026/11 --path roo-code=test/fixtures/roo/globalStorage/rooveterinaryinc.roo-cline --path copilot-cli=test/fixtures/copilot/session-state --path droid=test/fixtures/droid/sessions --html docs/demo-report.html",
     "prepublishOnly": "npm run build && npm test",
-    "smoke": "node dist/cli.js --dir test/fixtures/claude/projects --codex-dir test/fixtures/codex/sessions --no-color"
+    "smoke": "node dist/cli.js --dir test/fixtures/claude/projects --path codex=test/fixtures/codex/sessions --path gemini-cli=test/fixtures/gemini/tmp --path qwen-code=test/fixtures/qwen/projects --path cline=test/fixtures/cline/data --path roo-code=test/fixtures/roo/globalStorage/rooveterinaryinc.roo-cline --path copilot-cli=test/fixtures/copilot/session-state --path droid=test/fixtures/droid/sessions --path amp=test/fixtures/amp/threads --path opencode=test/fixtures/opencode/json-data --no-color",
+    "pretest": "npm run build"
   },
   "keywords": [
-    "claude-code",
-    "codex",
     "ai-agent",
-    "tokens",
-    "cost",
-    "profiler",
-    "llm",
+    "amp",
     "anthropic",
-    "openai",
+    "ccusage",
+    "claude-code",
+    "cli",
+    "cline",
+    "codex",
+    "copilot",
+    "cost",
+    "droid",
     "flamegraph",
-    "cli"
+    "gemini-cli",
+    "llm",
+    "openai",
+    "opencode",
+    "profiler",
+    "prompt-caching",
+    "qwen-code",
+    "roo-code",
+    "tokens",
+    "waste"
   ],
   "license": "MIT",
   "devDependencies": {

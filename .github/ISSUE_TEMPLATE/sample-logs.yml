@@ -1,0 +1,53 @@
+name: Contribute a sanitized sample log
+description: Help verify a parser for an agent we only know from docs/source (Codex, Gemini CLI, OpenCode, Cline, ...)
+title: "[sample] <agent> <version>"
+labels: ["parser", "sample-logs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most parsers are **experimental**: built from each agent's source and docs, and tested on synthetic fixtures only.
+        A small real sample is the fastest way to make one "verified".
+
+        **Before you paste anything, sanitize it.** Logs contain prompts, code, file paths and sometimes secrets.
+        Keep the *structure* (keys, nesting, types, token numbers); replace every string value you don't want public
+        with `"x"`. Token counts and model ids are fine to keep. You can also run `npx tokenscope --redact --json`
+        and attach the output to show the problem without sharing the raw log.
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options: [Codex CLI, Gemini CLI, Qwen Code, OpenCode, Kilo CLI, Cline, Roo Code, Kilo Code, GitHub Copilot CLI, Factory Droid, Amp, Other]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Agent version and OS
+      placeholder: "gemini-cli 0.12.0 on macOS 15"
+    validations:
+      required: true
+  - type: input
+    id: path
+    attributes:
+      label: Where the logs live (path pattern, with your username removed)
+      placeholder: "~/.gemini/tmp/<hash>/chats/session-*.json"
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sanitized sample (a few records are enough)
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What tokenscope reported vs. what you expected
+      description: e.g. the agent's own /stats or billing page says X tokens / $Y for this session.
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Privacy
+      options:
+        - label: I removed prompts, code, secrets and personal paths from the sample.
+          required: true

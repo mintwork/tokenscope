@@ -1,0 +1,19 @@
+name: Bug report
+description: Wrong numbers, crashes, or a missing agent location
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Output of `npx tokenscope --list-sources`
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: tokenscope version, Node version, OS

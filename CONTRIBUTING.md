@@ -33,20 +33,24 @@ src/
   render/                terminal, JSON, HTML (assets/report.{css,js} are inlined into the HTML)
 ```
 
-## Adding a parser (Cursor, Aider, Gemini CLI, ...)
+## Adding a parser (Cursor, Aider, Goose, ...)
 
-1. Create `src/parsers/<agent>.ts` exporting a `Parser` (`id`, `name`, `defaultDir()`, `load(dir)`).
-2. Map the agent's logs to `Session → Turn → ApiCall → ToolCall`. Key points:
-   - `Usage.input` is **uncached** input. If the provider reports input including cached tokens (OpenAI does), subtract them.
-   - Set `ToolCall.file`/`fileOp` for file reads and edits so the re-read detector works (see `fileAccess()` in `util.ts`).
-   - Set `resultChars` and `resultHash` when tool output is available.
-   - Deduplicate streamed or duplicated responses.
-3. Add the id to `SourceId` in `types.ts` and register the parser in `src/parsers/index.ts`.
-4. Add a **synthetic** fixture under `test/fixtures/<agent>/` and tests in `test/parsers.test.ts`.
+1. Create `src/parsers/<agent>.ts` exporting a `Parser`: `id`, `name`, `verified: false`, `caps`, `defaultDirs()` (every candidate location on macOS/Linux/Windows; use the helpers in `src/paths.ts`) and `load(dir, opts)`.
+2. Map the logs to `Session → Turn → ApiCall → ToolCall` with the helpers in `parsers/common.ts`. Key points:
+   - `Usage.input` is **uncached** input. If the agent reports input including cached tokens (OpenAI, Gemini, Roo, Copilot), subtract them. `Usage.output` includes reasoning/thinking tokens.
+   - Set `reportedCost` when the agent records its own cost; it is used when the model isn't in our pricing table.
+   - Use `newToolCall()` so file reads/edits are classified (`fileAccess()` in `util.ts`), and `setResult()` when tool output is available.
+   - Deduplicate streamed, rewritten, forked or migrated records.
+3. **Declare capabilities honestly** (`Capabilities` in `types.ts`): per-request tokens, cache reads/writes, tool calls, tool output, file paths, timestamps. Waste detectors only run when the data they need exists, and the report shows which checks ran per agent. Missing data must never show up as "$0 waste". If you're unsure whether a format records tool calls, pass `toolSeen(s)` to `finish()` so sessions without tool data are reported as unchecked.
+4. Add the id to `SourceId` in `types.ts`, register the parser in `src/parsers/index.ts`, and add its project-instructions file to `MEMORY_FILE` in `analyze/waste.ts` (used in tips).
+5. Add a **synthetic** fixture under `test/fixtures/<agent>/` that matches the real format as closely as you can verify, plus tests in `test/agents.test.ts`. Cite your sources (agent source files, docs) in the parser's header comment.
+6. Mark it `verified: true` only after it has been checked against real logs.
+
+If you adapt logic from another project, check its license and credit it in [NOTICE](NOTICE).
 
 ## Updating prices
 
-Edit `src/pricing/pricing.json`, bump `updated`, and cite the source (pricing page URL) in the PR description.
+Edit `src/pricing/pricing.json`, bump `updated`, and update the provider's entry in `sources` (pricing page URL + date).
 Omit `cacheRead` / `cacheWrite*` when they follow the default multipliers.
 
 ## Adding a waste detector
