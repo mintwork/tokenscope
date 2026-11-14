@@ -1,7 +1,6 @@
 # X / Twitter thread
 
-> Placeholders: `[MY_WASTE]` / `[MY_SPEND]` are from your own logs. Keep "my own logs" in the tweet or drop tweet 4's
-> first line. Attach `docs/demo.gif` to tweet 1 and `docs/demo.png` to tweet 5. Each tweet is under 280 characters.
+> Tweet 4 uses the author's own numbers (measured 2026-11-14, Oct 17 → Nov 14). Keep the "my own logs" label. Attach `docs/demo.gif` to tweet 1 and `docs/demo.png` to tweet 5. Each tweet is under 280 characters.
 
 **1/**
 ccusage tells you what your AI coding agent cost.
@@ -25,9 +24,9 @@ The cause matters because the fix is different:
 - break over an hour → nothing to fix, so it's not counted
 
 **4/**
-On my own logs: [MY_WASTE] of [MY_SPEND] last month. One person's usage, not a benchmark.
+My own logs: ≈$467 of $1,746 (27%) over 4 weeks was avoidable, mostly via a 1-hour cache TTL. One person, not a benchmark.
 
-It also catches the agent running `npm test` five times for the same failure, and the same file being re-read with nothing edited in between.
+It also catches `npm test` run 5× for the same failure, and files re-read with nothing edited.
 
 **5/**
 --html writes one self-contained file with a flame graph of spend, down to single API calls and subagents.

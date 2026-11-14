@@ -1,7 +1,6 @@
 # r/ClaudeAI post
 
-> Placeholders: `[MY_WASTE]` / `[MY_SPEND]` are from your own logs. Keep them labelled as your own numbers or cut the
-> line. Check the subreddit's self-promotion rules and use the flair it asks for (likely "Built with Claude" or "Tool").
+> The numbers below are the author's own (measured 2026-11-14 over Oct 17 → Nov 14); keep them labelled as such. Check the subreddit's self-promotion rules and use the flair it asks for (likely "Built with Claude" or "Tool").
 > Attach `docs/demo.gif` or link the repo.
 
 ## Title
@@ -24,7 +23,7 @@ Each finding comes with an estimated cost and a concrete fix, e.g. `"promptCache
 `~/.claude/settings.json`. That one is only suggested when it actually nets a saving, because 1h cache writes cost
 more. It never suggests `/clear` to "save" tokens, because rebuilding the context costs about the same.
 
-On my own logs it found roughly [MY_WASTE] out of [MY_SPEND] last month. Yours will differ: it depends a lot on how
+On my own logs it found roughly $467 out of $1,746 over the last four weeks (27%), mostly cache rebuilds while I was reading or replying. Yours will differ: it depends a lot on how
 often you step away mid-session.
 
 ```

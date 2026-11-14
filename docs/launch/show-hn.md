@@ -1,7 +1,7 @@
 # Show HN
 
-> Placeholders: `[MY_WASTE]` and `[MY_SPEND]` are numbers from your own logs (run `npx tokenscope` and copy the
-> headline). Keep the "from my own logs" label next to them, or delete the sentence. Don't post until the repo is
+> The numbers below are the author's own (measured 2026-11-14 over Oct 17 → Nov 14); keep the "my own logs" label.
+> Don't post until the repo is
 > public and the package is on npm.
 
 ## Title
@@ -30,7 +30,7 @@ Every finding gets a counterfactual dollar estimate ("what this would have cost 
 priced with the same table as the spend) and a one-line fix. The headline counts only the realistic savings. Things
 that are probably avoidable but might have been deliberate, like compaction or a model switch, are shown separately.
 
-On my own logs last month it flagged about [MY_WASTE] of [MY_SPEND]. That's one person's usage, not a benchmark.
+On my own logs for the last four weeks it estimated about $467 of $1,746 (27%) could have been saved, almost all of it from cache rebuilds a 1-hour cache TTL would have avoided. That's one person's usage, not a benchmark.
 
 Other details:
 
