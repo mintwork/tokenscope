@@ -1,0 +1,3 @@
+{"sessionId": "sub-0001", "projectHash": "x", "startTime": "2026-04-02T08:30:22.000Z", "kind": "subagent"}
+{"id": "s1", "timestamp": "2026-04-02T08:30:22.100Z", "type": "user", "content": "find parse callers"}
+{"id": "s2", "timestamp": "2026-04-02T08:30:23.000Z", "type": "gemini", "content": "", "model": "gemini-2.5-flash", "tokens": {"input": 3000, "output": 50, "cached": 0, "thoughts": 0, "tool": 0, "total": 3050}}
