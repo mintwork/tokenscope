@@ -6,7 +6,7 @@ import { codexParser } from '../src/parsers/codex.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CLAUDE = path.join(here, 'fixtures/claude/projects');
-const CODEX = path.join(here, 'fixtures/codex/sessions');
+const CODEX = path.join(here, 'fixtures/codex/sessions/2026/11');
 
 describe('claude-code parser', async () => {
   const sessions = await claudeCodeParser.load(CLAUDE);

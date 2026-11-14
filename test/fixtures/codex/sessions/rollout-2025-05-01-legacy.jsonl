@@ -1,0 +1,2 @@
+{"id": "legacy", "timestamp": "2025-05-01T00:00:00Z", "instructions": ""}
+{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]}
