@@ -18,6 +18,7 @@ npm test         # vitest
 npm run build    # tsc + copy assets into dist/
 npm run smoke    # CLI against fixtures
 npm run demo     # synthetic demo -> docs/demo-report.html
+npm run demo:visuals  # re-render docs/demo.png + docs/demo.gif (Google Chrome + ffmpeg)
 ```
 
 ## Layout

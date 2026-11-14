@@ -10,9 +10,9 @@
 
 Zero dependencies · runs 100% locally · Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more · MIT
 
-![tokenscope HTML report: estimated waste by pattern with fixes, plus a flame graph of token spend](docs/demo.png)
+![npx tokenscope in a terminal: estimated waste first, with a fix for each finding, then spend by project, model, session and tool](docs/demo.gif)
 
-<sub>Screenshot generated from synthetic logs (`npm run demo`). Open <a href="docs/demo-report.html">docs/demo-report.html</a> for the interactive version.</sub>
+<sub>Recorded from the real CLI on synthetic logs (`npm run demo:gif`).</sub>
 
 </div>
 
@@ -52,6 +52,14 @@ Every finding comes with an estimated dollar cost and a one-line fix.
 | **Rebuilds after breaks over an hour** | No cache lives that long. | None needed. A fresh session helps only if you're starting an unrelated task. | ❌ not waste, shown for context |
 
 **Plus the spend side:** cost per session, project, model, day and tool, cache hit rate, how much caching saved you, and a **flame graph** (project → session → turn → API call → subagent) you can click to zoom.
+
+### The HTML report
+
+`npx tokenscope --html --open` writes one self-contained file: waste by pattern with fixes, which checks ran per agent, and a zoomable flame graph of spend.
+
+![tokenscope HTML report: estimated waste by pattern with fixes, plus a flame graph of token spend](docs/demo.png)
+
+<sub>Screenshot generated from synthetic logs (`npm run demo:png`). Open <a href="docs/demo-report.html">docs/demo-report.html</a> for the interactive version.</sub>
 
 ## How waste is estimated
 
@@ -138,7 +146,7 @@ Tuning
   --huge <tokens>        tool output size flagged as huge (default 10000)
   --top <n>              rows per terminal section (default 8)
   --redact               hide prompts, titles, paths and commands
-  --no-color             disable ANSI colors (also honors NO_COLOR)
+  --no-color             disable ANSI colors (also honors NO_COLOR; FORCE_COLOR forces them on)
 ```
 
 ```bash
@@ -187,6 +195,7 @@ npm install
 npm test          # builds, then vitest on synthetic fixtures
 npm run smoke     # run the CLI against the fixtures
 npm run demo      # generate synthetic logs + docs/demo-report.html
+npm run demo:visuals  # re-render docs/demo.png and docs/demo.gif (needs Google Chrome + ffmpeg)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). **Never commit real session logs.** They contain your prompts, code and secrets.
