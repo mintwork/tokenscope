@@ -2,6 +2,7 @@
  * The HTML report renders strings taken from agent logs (project names, prompts, tool names, file
  * paths). A crafted log must not be able to inject markup or break out of the embedded JSON.
  */
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -93,6 +94,11 @@ describe('HTML report with hostile log content', async () => {
     expect(csp).toMatch(/default-src 'none'/);
     expect(csp).toMatch(/script-src 'sha256-[A-Za-z0-9+/=]+'(;|$)/);
     expect(csp).not.toMatch(/unsafe-inline'[^;]*script|script-src[^;]*unsafe/);
+    // The hash must match the script as the browser sees it: LF line endings (HTML parsing turns CRLF into LF).
+    const start = html.lastIndexOf('<script>') + '<script>'.length;
+    const client = html.slice(start, html.indexOf('</script>', start));
+    expect(client).not.toContain('\r');
+    expect(csp).toContain(`'sha256-${createHash('sha256').update(client).digest('base64')}'`);
   });
 
   it('renders the payloads as text in a real browser (Chrome)', async (ctx) => {
@@ -115,6 +121,8 @@ describe('HTML report with hostile log content', async () => {
       page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
       page.on('dialog', (d) => (dialogs.push(d.message()), d.dismiss()));
       await page.goto(pathToFileURL(file).href);
+      expect(errors).toEqual([]); // e.g. a CSP hash mismatch would block the client here
+      await page.waitForSelector('#flame .n', { timeout: 5000 });
       // Exercise every sink: hover each flame/treemap/daily element (tooltips), switch filters and sort.
       for (const sel of ['#flame .n', '#treemap .tm', '#daily .hit']) {
         for (const h of await page.$$(sel)) await h.dispatchEvent('mousemove', { clientX: 10, clientY: 10, bubbles: true });
@@ -138,7 +146,7 @@ describe('HTML report with hostile log content', async () => {
       expect(dialogs).toEqual([]);
       expect(state.xss).toBeNull();
       expect(state.injected).toHaveLength(1); // only the bundled client script
-      expect(state.injected[0]).toMatch(/^<script>/);
+      expect(state.injected[0]!.startsWith('<script>')).toBe(true);
       expect(state.scripts).toBe(2);
       expect(state.kpis).toBeGreaterThan(0);
       expect(state.text).toContain(TOOL); // shown literally, as text
