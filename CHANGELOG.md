@@ -32,4 +32,4 @@ First public release.
 - `FORCE_COLOR` forces ANSI colors when stdout is not a TTY; `COLUMNS` sets the width when it is not a terminal.
 - Zero runtime dependencies, Node 22+, 100% local: no network requests, no telemetry.
 
-[0.1.0]: https://github.com/ranjan-mohanty/tokenscope/releases/tag/v0.1.0
+[0.1.0]: https://github.com/mintwork/tokenscope/releases/tag/v0.1.0

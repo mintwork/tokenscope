@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Renders docs/demo.gif: an animated terminal recording of `npx tokenscope` on SYNTHETIC logs.
+// Renders docs/demo.gif: an animated terminal recording of `npx @mintwork/tokenscope` on SYNTHETIC logs.
 //
 // How it works:
 //   1. scripts/gen-demo.mjs writes synthetic Claude Code logs into a throwaway HOME (never your real logs).
@@ -26,7 +26,7 @@ const WIDTH = 1200;
 const ROWS = 30; // visible terminal rows
 const FONT = 18; // px; 100 columns of Menlo at 18px fit in 1200px
 const LINE = 1.38;
-const COMMAND = 'npx tokenscope';
+const COMMAND = 'npx @mintwork/tokenscope';
 
 const work = mkdtempSync(path.join(tmpdir(), 'tokenscope-gif-'));
 try {

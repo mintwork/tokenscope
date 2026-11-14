@@ -19,7 +19,7 @@ const HELP = `
 tokenscope ${VERSION} - find the tokens (and money) your AI coding agent wasted
 
 Usage
-  npx tokenscope [options]
+  npx @mintwork/tokenscope [options]
 
 Output
   (default)              terminal summary: waste first, then spend

@@ -77,5 +77,5 @@ fixture-driven test.
    ```
 
 **npm auth:** the workflow uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
-(configure `ranjan-mohanty/tokenscope` + `release.yml` on the package's npm settings page), or an
+(configure `mintwork/tokenscope` + `release.yml` on the package's npm settings page), or an
 `NPM_TOKEN` repository secret as a fallback. A version already on npm is skipped.

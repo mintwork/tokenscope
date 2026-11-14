@@ -11,7 +11,7 @@ body:
   - type: textarea
     id: sources
     attributes:
-      label: Output of `npx tokenscope --list-sources`
+      label: Output of `npx @mintwork/tokenscope --list-sources`
       render: text
   - type: input
     id: env

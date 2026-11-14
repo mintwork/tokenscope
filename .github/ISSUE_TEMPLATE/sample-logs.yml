@@ -11,7 +11,7 @@ body:
 
         **Before you paste anything, sanitize it.** Logs contain prompts, code, file paths and sometimes secrets.
         Keep the *structure* (keys, nesting, types, token numbers); replace every string value you don't want public
-        with `"x"`. Token counts and model ids are fine to keep. You can also run `npx tokenscope --redact --json`
+        with `"x"`. Token counts and model ids are fine to keep. You can also run `npx @mintwork/tokenscope --redact --json`
         and attach the output to show the problem without sharing the raw log.
   - type: dropdown
     id: agent

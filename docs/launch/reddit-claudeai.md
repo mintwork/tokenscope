@@ -27,8 +27,8 @@ On my own logs it found roughly $467 out of $1,746 over the last four weeks (27%
 often you step away mid-session.
 
 ```
-npx tokenscope               # terminal summary, waste first
-npx tokenscope --html --open # report with a flame graph of spend
+npx @mintwork/tokenscope               # terminal summary, waste first
+npx @mintwork/tokenscope --html --open # report with a flame graph of spend
 ```
 
 - Runs 100% locally, no network calls, zero dependencies. `--redact` if you want to share a report.
@@ -36,6 +36,6 @@ npx tokenscope --html --open # report with a flame graph of spend
 - Also reads Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and a few more. Those parsers are experimental, and
   sample logs are very welcome.
 
-Repo: https://github.com/ranjan-mohanty/tokenscope
+Repo: https://github.com/mintwork/tokenscope
 
 Happy to answer questions about how the estimates work. The README has the exact counterfactual for each pattern.

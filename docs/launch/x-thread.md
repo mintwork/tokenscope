@@ -7,7 +7,7 @@ ccusage tells you what your AI coding agent cost.
 
 tokenscope tells you what it wasted: cache rebuilds, loops, re-reads, giant tool outputs. Each one gets a $ estimate and a fix.
 
-npx tokenscope
+npx @mintwork/tokenscope
 
 [demo.gif]
 
@@ -40,4 +40,4 @@ It's MIT-licensed and meant to run alongside ccusage, not replace it.
 
 Sample logs from the experimental agents would help a lot.
 
-github.com/ranjan-mohanty/tokenscope 
+github.com/mintwork/tokenscope 

@@ -6,7 +6,7 @@ tokenscope reads the session logs your AI coding agents already keep on disk, fi
 nothing, estimates what each one cost, and tells you how to stop it. Then it shows the rest of your spend as a flame
 graph. It runs locally, has zero dependencies and makes no network calls.
 
-![npx tokenscope on synthetic logs](https://raw.githubusercontent.com/ranjan-mohanty/tokenscope/v0.1.0/docs/demo.gif)
+![npx @mintwork/tokenscope on synthetic logs](https://raw.githubusercontent.com/mintwork/tokenscope/v0.1.0/docs/demo.gif)
 
 ## Highlights
 
@@ -26,8 +26,8 @@ graph. It runs locally, has zero dependencies and makes no network calls.
 ## Install
 
 ```bash
-npx tokenscope               # waste first, then spend, in the terminal
-npx tokenscope --html --open # interactive report with the flame graph
+npx @mintwork/tokenscope               # waste first, then spend, in the terminal
+npx @mintwork/tokenscope --html --open # interactive report with the flame graph
 ```
 
 Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys.
@@ -35,11 +35,11 @@ Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no
 ## Notes
 
 - Costs are API list-price equivalents. Subscriptions (Claude Max, ChatGPT plans, Copilot) bill differently.
-- Waste figures are estimates; [How waste is estimated](https://github.com/ranjan-mohanty/tokenscope#how-waste-is-estimated)
+- Waste figures are estimates; [How waste is estimated](https://github.com/mintwork/tokenscope#how-waste-is-estimated)
   explains every counterfactual.
 - The experimental parsers were built from each agent's source and docs and tested on synthetic fixtures. If you use one,
-  please run `npx tokenscope --source <agent>` and
-  [send a sanitized sample](https://github.com/ranjan-mohanty/tokenscope/issues/new?template=sample-logs.yml) if the
+  please run `npx @mintwork/tokenscope --source <agent>` and
+  [send a sanitized sample](https://github.com/mintwork/tokenscope/issues/new?template=sample-logs.yml) if the
   numbers look off.
 
-Full changelog: [CHANGELOG.md](https://github.com/ranjan-mohanty/tokenscope/blob/v0.1.0/CHANGELOG.md)
+Full changelog: [CHANGELOG.md](https://github.com/mintwork/tokenscope/blob/v0.1.0/CHANGELOG.md)

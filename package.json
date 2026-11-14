@@ -1,5 +1,5 @@
 {
-  "name": "tokenscope",
+  "name": "@mintwork/tokenscope",
   "version": "0.1.0",
   "description": "Find the money your AI coding agent wasted: cache rebuilds, loops, re-reads and giant tool outputs, with fixes, plus a flame graph of token spend. Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more. Zero dependencies, 100% local.",
   "type": "module",
@@ -72,10 +72,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ranjan-mohanty/tokenscope.git"
+    "url": "git+https://github.com/mintwork/tokenscope.git"
   },
-  "homepage": "https://github.com/ranjan-mohanty/tokenscope#readme",
+  "homepage": "https://github.com/mintwork/tokenscope#readme",
   "bugs": {
-    "url": "https://github.com/ranjan-mohanty/tokenscope/issues"
+    "url": "https://github.com/mintwork/tokenscope/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

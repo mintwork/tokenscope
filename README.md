@@ -6,18 +6,18 @@
 
 *ccusage tells you what you spent. tokenscope tells you what you wasted.*
 
-`npx tokenscope`
+`npx @mintwork/tokenscope`
 
 Zero dependencies · runs 100% locally · Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more · MIT
 
-[![CI](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml/badge.svg)](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/tokenscope?color=cb3837&logo=npm)](https://www.npmjs.com/package/tokenscope)
-[![npm downloads](https://img.shields.io/npm/dm/tokenscope?color=cb3837)](https://www.npmjs.com/package/tokenscope)
+[![CI](https://github.com/mintwork/tokenscope/actions/workflows/ci.yml/badge.svg)](https://github.com/mintwork/tokenscope/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@mintwork/tokenscope?color=cb3837&logo=npm)](https://www.npmjs.com/package/@mintwork/tokenscope)
+[![npm downloads](https://img.shields.io/npm/dm/@mintwork/tokenscope?color=cb3837)](https://www.npmjs.com/package/@mintwork/tokenscope)
 [![node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](package.json)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/ranjan-mohanty/tokenscope?style=social)](https://github.com/ranjan-mohanty/tokenscope/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/mintwork/tokenscope?style=social)](https://github.com/mintwork/tokenscope/stargazers)
 
-![npx tokenscope in a terminal: estimated waste first, with a fix for each finding, then spend by project, model, session and tool](docs/demo.gif)
+![npx @mintwork/tokenscope in a terminal: estimated waste first, with a fix for each finding, then spend by project, model, session and tool](docs/demo.gif)
 
 <sub>Recorded from the real CLI on synthetic logs (`npm run demo:gif`).</sub>
 
@@ -37,8 +37,8 @@ tokenscope reads the session logs your agents already keep on disk, finds these 
 ## Install
 
 ```bash
-npx tokenscope               # waste first, then spend, in the terminal
-npx tokenscope --html --open # interactive report with the flame graph
+npx @mintwork/tokenscope               # waste first, then spend, in the terminal
+npx @mintwork/tokenscope --html --open # interactive report with the flame graph
 ```
 
 Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls. Your logs never leave your machine.
@@ -62,11 +62,11 @@ Every finding comes with an estimated dollar cost and a one-line fix.
 
 ### The HTML report
 
-`npx tokenscope --html --open` writes one self-contained file: waste by pattern with fixes, which checks ran per agent, and a zoomable flame graph of spend.
+`npx @mintwork/tokenscope --html --open` writes one self-contained file: waste by pattern with fixes, which checks ran per agent, and a zoomable flame graph of spend.
 
 ![tokenscope HTML report: estimated waste by pattern with fixes, plus a flame graph of token spend](docs/demo.png)
 
-<sub>Screenshot generated from synthetic logs (`npm run demo:png`). Open the <a href="https://ranjan-mohanty.github.io/tokenscope/demo-report.html">interactive demo report</a>.</sub>
+<sub>Screenshot generated from synthetic logs (`npm run demo:png`). Open the <a href="https://mintwork.github.io/tokenscope/demo-report.html">interactive demo report</a>.</sub>
 
 ## How waste is estimated
 
@@ -121,9 +121,9 @@ Each parser declares what its log format contains. A waste check only runs when 
 | Factory Droid | 🧪 experimental | ❌ session totals only | ◐ if transcript has tool blocks | ◐ | ◐ | `~/.factory/sessions` |
 | Amp | 🧪 experimental | ✅ | ◐ tool-block shape unverified | ◐ | ◐ | `~/.local/share/amp/threads` |
 
-*Experimental* means the parser was built from the agent's source code and docs, cross-checked against other open-source parsers, and tested on synthetic fixtures, but nobody has run it on a real user's logs yet. **If you use one of these agents, please run `npx tokenscope --source <agent>` and [open an issue](.github/ISSUE_TEMPLATE/sample-logs.yml) with a sanitized sample** if the numbers look off. That's how a parser becomes *verified*.
+*Experimental* means the parser was built from the agent's source code and docs, cross-checked against other open-source parsers, and tested on synthetic fixtures, but nobody has run it on a real user's logs yet. **If you use one of these agents, please run `npx @mintwork/tokenscope --source <agent>` and [open an issue](.github/ISSUE_TEMPLATE/sample-logs.yml) with a sanitized sample** if the numbers look off. That's how a parser becomes *verified*.
 
-VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf, VSCodium, Positron, Antigravity, Trae and Kiro on macOS, Linux (including `~/.vscode-server`) and Windows. Run `npx tokenscope --list-sources` to see what was found where.
+VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf, VSCodium, Positron, Antigravity, Trae and Kiro on macOS, Linux (including `~/.vscode-server`) and Windows. Run `npx @mintwork/tokenscope --list-sources` to see what was found where.
 
 ## Usage
 
@@ -157,12 +157,12 @@ Tuning
 ```
 
 ```bash
-npx tokenscope --since 7d                         # last week
-npx tokenscope --source codex,gemini-cli          # just these agents
-npx tokenscope --path opencode=~/backup/opencode  # read from somewhere else
-npx tokenscope -p checkout --html report.html     # one project, as HTML
-npx tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
-npx tokenscope --redact --html share.html         # safe to post in Slack
+npx @mintwork/tokenscope --since 7d                         # last week
+npx @mintwork/tokenscope --source codex,gemini-cli          # just these agents
+npx @mintwork/tokenscope --path opencode=~/backup/opencode  # read from somewhere else
+npx @mintwork/tokenscope -p checkout --html report.html     # one project, as HTML
+npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
+npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
 ```
 
 Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`).
@@ -178,7 +178,7 @@ For each API request: `input × in + output × out + cache_read × read + cache_
 To update prices, edit `pricing.json` (PRs welcome) or pass your own file:
 
 ```bash
-npx tokenscope --pricing my-prices.json   # { "models": { "my-model": { "input": 1, "output": 5 } } }
+npx @mintwork/tokenscope --pricing my-prices.json   # { "models": { "my-model": { "input": 1, "output": 5 } } }
 ```
 
 ## Privacy

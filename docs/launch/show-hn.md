@@ -10,7 +10,7 @@ Show HN: Tokenscope – find the tokens your AI coding agent wasted (companion t
 
 ## URL
 
-https://github.com/ranjan-mohanty/tokenscope
+https://github.com/mintwork/tokenscope
 
 ## Body
 
@@ -34,7 +34,7 @@ On my own logs for the last four weeks it estimated about $467 of $1,746 (27%) c
 
 Other details:
 
-- Zero runtime dependencies, runs locally, no network calls. `npx tokenscope` for the terminal, `--html` for a
+- Zero runtime dependencies, runs locally, no network calls. `npx @mintwork/tokenscope` for the terminal, `--html` for a
   self-contained report with a flame graph of spend, `--json` for scripting, `--redact` for sharing.
 - Claude Code is verified on real logs. Codex, Gemini CLI, Qwen Code, OpenCode, Cline, Roo, Kilo, Copilot CLI, Droid
   and Amp are experimental: built from their source and docs, tested on synthetic fixtures. Each parser declares what
