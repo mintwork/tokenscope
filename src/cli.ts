@@ -45,7 +45,7 @@ Tuning
   --huge <tokens>        tool output size flagged as huge (default 10000)
   --top <n>              rows per section in the terminal (default 8)
   --redact               replace prompts, titles, paths and commands with placeholders
-  --no-color             disable ANSI colors (also honors NO_COLOR)
+  --no-color             disable ANSI colors (also honors NO_COLOR; FORCE_COLOR forces them on)
   -h, --help / -v, --version
 `.replace('${SOURCES}', parsers.map((p) => p.id).join(', '));
 
@@ -212,8 +212,9 @@ async function main(rawArgv: string[]): Promise<number> {
     if (jsonFlag) return 0;
   }
   if (!jsonFlag) {
-    const color = !values['no-color'] && !process.env.NO_COLOR && process.stdout.isTTY === true;
-    process.stdout.write(renderTerminal(report, { color, width: process.stdout.columns ?? 100, top: Number(values.top ?? 8) }) + '\n');
+    const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
+    const color = !values['no-color'] && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
+    process.stdout.write(renderTerminal(report, { color, width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
   }
   return 0;

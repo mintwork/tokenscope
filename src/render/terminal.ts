@@ -1,4 +1,4 @@
-import type { Report } from '../analyze/report.js';
+import type { Report, SessionSummary } from '../analyze/report.js';
 import type { Severity } from '../analyze/waste.js';
 import { dateShort, pct, tok, usd } from './format.js';
 
@@ -89,12 +89,14 @@ export function renderTerminal(r: Report, o: TermOptions): string {
     line(p.green(`No waste patterns found in ${usd(t.cost)} of spend. Nice.`));
   }
   const ttlSaved = r.findings.filter((f) => f.cause === 'pause' || f.cause === 'tool-wait').reduce((n, f) => n + f.cost, 0);
+  // long notes wrap at the terminal width, continuation lines indented
+  const note = (text: string) => wrap(text, W - 4, 4).forEach((l, i) => line(p.dim(`  ${i ? '  ' : ''}${l}`)));
   if (ttlSaved > 0)
-    line(p.dim(`  1-hour cache TTL: ${usd(ttlSaved)} net in the sessions that would gain; turned on everywhere it nets ${t.ttlGlobalNet >= 0 ? usd(t.ttlGlobalNet) : '-' + usd(-t.ttlGlobalNet)} (the 1h write premium applies to every session)`));
+    note(`1-hour cache TTL: ${usd(ttlSaved)} net in the sessions that would gain; turned on everywhere it nets ${t.ttlGlobalNet >= 0 ? usd(t.ttlGlobalNet) : '-' + usd(-t.ttlGlobalNet)} (the 1h write premium applies to every session)`);
   if (t.unavoidableRebuilds)
-    line(p.dim(`  not counted: ${t.unavoidableRebuilds} cache rebuild${t.unavoidableRebuilds > 1 ? 's' : ''} after breaks over an hour (${usd(t.unavoidableRebuildCost)}) - no cache lives that long; a fresh session helps only if you start an unrelated task`));
+    note(`not counted: ${t.unavoidableRebuilds} cache rebuild${t.unavoidableRebuilds > 1 ? 's' : ''} after breaks over an hour (${usd(t.unavoidableRebuildCost)}) - no cache lives that long; a fresh session helps only if you start an unrelated task`);
   if (anyChecked && t.partiallyCheckedSessions)
-    line(p.dim(`  ${t.partiallyCheckedSessions} of ${t.sessions} sessions could only be partly checked (missing data, see below) - real waste may be higher.`));
+    note(`${t.partiallyCheckedSessions} of ${t.sessions} sessions could only be partly checked (missing data, see below) - real waste may be higher.`);
 
   if (r.findings.length) {
     const counts = new Map<string, { n: number; cost: number }>();
@@ -139,16 +141,15 @@ export function renderTerminal(r: Report, o: TermOptions): string {
   // ===== THEN SPEND =====
   h('Spend');
   const kpi = (label: string, value: string) => `${p.dim(label)} ${p.bold(value)}`;
-  line(
-    '  ' +
-      [
-        kpi('total', p.green(usd(t.cost))),
-        kpi('tokens', tok(t.tokens)),
-        kpi('sessions', String(t.sessions) + (t.subagents ? p.dim(` +${t.subagents} subagents`) : '')),
-        kpi('API calls', t.calls.toLocaleString('en-US')),
-        kpi('cache hit', pct(t.cacheHitRate)),
-      ].join(p.dim('  │  ')),
-  );
+  const kpis = [
+    kpi('total', p.green(usd(t.cost))),
+    kpi('tokens', tok(t.tokens)),
+    kpi('sessions', String(t.sessions) + (t.subagents ? p.dim(` +${t.subagents} subagents`) : '')),
+    kpi('API calls', t.calls.toLocaleString('en-US')),
+    kpi('cache hit', pct(t.cacheHitRate)),
+  ];
+  const wide = '  ' + kpis.join(p.dim('  │  '));
+  line(vis(wide) <= W ? wide : '  ' + kpis.join(p.dim(' │ ')));
   if (t.costWithoutCache > t.cost)
     line(p.dim(`  prompt caching saved you ${usd(t.costWithoutCache - t.cost)} (would have been ${usd(t.costWithoutCache)})`));
 
@@ -187,13 +188,16 @@ export function renderTerminal(r: Report, o: TermOptions): string {
   // --- top sessions ---
   if (r.sessions.length) {
     h('Most expensive sessions');
-    const titleW = Math.max(16, W - 62);
+    // fixed columns take 53 chars; leave room for the "  $0.74 in 3 subagents" suffix so rows fit the width
+    const subLabel = (s: SessionSummary) => (s.subagentCost > 0 ? `  ${usd(s.subagentCost)} in ${s.subagents} subagent${s.subagents === 1 ? '' : 's'}` : '');
+    const subW = Math.max(0, ...r.sessions.slice(0, o.top).map((s) => subLabel(s).length));
+    const titleW = Math.max(16, W - 53 - subW);
     line(p.dim(`  ${padL('cost', 10)}  ${padR('date', 7)} ${padR('project', 16)} ${padR('session', titleW)} ${padL('calls', 6)} ${padL('cache', 6)}`));
     for (const s of r.sessions.slice(0, o.top)) {
       const label = s.title ?? s.id.slice(0, 8);
       line(
         `  ${padL(p.bold(usd(s.cost)), 10)}  ${padR(dateShort(s.start), 7)} ${padR(trunc(s.project, 16), 16)} ${padR(trunc(label, titleW), titleW)} ${padL(String(s.calls), 6)} ${padL(pct(s.cacheHitRate, 0), 6)}` +
-          (s.subagentCost > 0 ? p.dim(`  ${usd(s.subagentCost)} in ${s.subagents} subagent${s.subagents === 1 ? '' : 's'}`) : ''),
+          (s.subagentCost > 0 ? p.dim(subLabel(s)) : ''),
       );
     }
   }
