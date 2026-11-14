@@ -238,7 +238,8 @@ function severityFor(cost: number, floor: Severity = 'low'): Severity {
 const usd = (n: number) => (n < 0.01 ? '<$0.01' : '$' + n.toFixed(2));
 const fmtTok = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n));
 const oneLine = (t: string, n: number) => {
-  const x = t.replace(/<\/?[a-z_]+>/g, '').replace(/\s+/g, ' ').trim();
+  // Claude Code wraps tool errors in <tool_use_error>; plain text, never rendered as HTML unescaped
+  const x = t.split('<tool_use_error>').join('').split('</tool_use_error>').join('').replace(/\s+/g, ' ').trim();
   return x.length > n ? x.slice(0, n - 1) + '…' : x;
 };
 const short = (p: string, n = 60) => (p.length > n ? '…' + p.slice(-(n - 1)) : p);
