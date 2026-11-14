@@ -12,12 +12,6 @@ updates:
       dependencies:
         dependency-type: production
         update-types: [minor, patch]
-    ignore:
-      # vitest 5 (and vite 7+) need Node 20.19+/22, and CI still tests Node 20.0+.
-      - dependency-name: vitest
-        versions: [">=5"]
-      - dependency-name: vite
-        versions: [">=7"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

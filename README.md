@@ -13,7 +13,7 @@ Zero dependencies · runs 100% locally · Claude Code, Codex, Gemini CLI, OpenCo
 [![CI](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml/badge.svg)](https://github.com/ranjan-mohanty/tokenscope/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/tokenscope?color=cb3837&logo=npm)](https://www.npmjs.com/package/tokenscope)
 [![npm downloads](https://img.shields.io/npm/dm/tokenscope?color=cb3837)](https://www.npmjs.com/package/tokenscope)
-[![node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](package.json)
+[![node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](package.json)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/ranjan-mohanty/tokenscope?style=social)](https://github.com/ranjan-mohanty/tokenscope/stargazers)
 
@@ -41,7 +41,7 @@ npx tokenscope               # waste first, then spend, in the terminal
 npx tokenscope --html --open # interactive report with the flame graph
 ```
 
-Needs Node 20+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls. Your logs never leave your machine.
+Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls. Your logs never leave your machine.
 
 ## What it finds
 

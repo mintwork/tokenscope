@@ -30,7 +30,7 @@ npx tokenscope               # waste first, then spend, in the terminal
 npx tokenscope --html --open # interactive report with the flame graph
 ```
 
-Needs Node 20+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys.
+Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys.
 
 ## Notes
 

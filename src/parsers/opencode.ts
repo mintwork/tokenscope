@@ -163,7 +163,7 @@ async function openSqlite(file: string, notes?: string[]): Promise<{ db: Db; cle
       if (String((w as Error)?.message ?? w).includes('SQLite')) return;
       return (origEmit as any).call(process, w, ...rest);
     }) as typeof process.emitWarning;
-    const modName = 'node:sqlite'; // indirection: @types/node 20 has no typings for it
+    const modName = 'node:sqlite'; // indirection keeps the import lazy, so Node < 22.13 (no node:sqlite) can still load this module
     mod = await import(modName);
   } catch {
     notes?.push(`OpenCode: found ${path.basename(file)} but reading SQLite needs Node 22.13+ (you have ${process.version}); only legacy JSON storage was read.`);

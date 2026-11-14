@@ -30,6 +30,6 @@ First public release.
   agent-reported cost as a fallback, and `--pricing` overrides. Unknown models are listed in a warning, never guessed.
 - Filters: `--since`, `--until`, `--project`.
 - `FORCE_COLOR` forces ANSI colors when stdout is not a TTY; `COLUMNS` sets the width when it is not a terminal.
-- Zero runtime dependencies, Node 20+, 100% local: no network requests, no telemetry.
+- Zero runtime dependencies, Node 22+, 100% local: no network requests, no telemetry.
 
 [0.1.0]: https://github.com/ranjan-mohanty/tokenscope/releases/tag/v0.1.0

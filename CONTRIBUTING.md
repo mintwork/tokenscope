@@ -8,7 +8,7 @@ Thanks for helping. Bug reports, new parsers, pricing updates and new waste dete
   sometimes secrets. Tests and demos use synthetic data only (`test/fixtures/`, `scripts/gen-demo.mjs`).
   If you need a real log's *shape*, describe the field names in your PR, not the content.
 - Keep **zero runtime dependencies**. Node built-ins only. Dev dependencies are fine.
-- Node 20+ and TypeScript `strict`.
+- Node 22+ and TypeScript `strict`.
 
 ## Setup
 
