@@ -152,9 +152,10 @@ function putMessage(store: Store, m: RawMessage, parts: RawPart[]): void {
 
 /* ------------------------------ SQLite (G1/G2) ------------------------------ */
 
-type Db = { prepare(sql: string): { all(...a: unknown[]): any[] }; close(): void };
+export type Db = { prepare(sql: string): { all(...a: unknown[]): any[] }; close(): void };
 
-async function openSqlite(file: string, notes?: string[]): Promise<{ db: Db; cleanup: () => void } | undefined> {
+/** Open a SQLite file read-only with the built-in node:sqlite (Node 22.13+); shared with other SQLite-backed parsers. */
+export async function openSqlite(file: string, notes?: string[], agent = 'OpenCode', fallback = 'only legacy JSON storage was read'): Promise<{ db: Db; cleanup: () => void } | undefined> {
   let mod: any;
   const origEmit = process.emitWarning;
   try {
@@ -166,7 +167,7 @@ async function openSqlite(file: string, notes?: string[]): Promise<{ db: Db; cle
     const modName = 'node:sqlite'; // indirection keeps the import lazy, so Node < 22.13 (no node:sqlite) can still load this module
     mod = await import(modName);
   } catch {
-    notes?.push(`OpenCode: found ${path.basename(file)} but reading SQLite needs Node 22.13+ (you have ${process.version}); only legacy JSON storage was read.`);
+    notes?.push(`${agent}: found ${path.basename(file)} but reading SQLite needs Node 22.13+ (you have ${process.version}); ${fallback}.`);
     return undefined;
   } finally {
     process.emitWarning = origEmit;
@@ -185,7 +186,7 @@ async function openSqlite(file: string, notes?: string[]): Promise<{ db: Db; cle
       return { db, cleanup: () => (db.close(), rmSync(tmp, { recursive: true, force: true })) };
     } catch (err) {
       rmSync(tmp, { recursive: true, force: true });
-      notes?.push(`OpenCode: could not open ${file}: ${err instanceof Error ? err.message : String(err)}`);
+      notes?.push(`${agent}: could not open ${file}: ${err instanceof Error ? err.message : String(err)}`);
       return undefined;
     }
   }

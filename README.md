@@ -87,7 +87,7 @@ The headline (**"could have been saved"**) is the sum of the ✅ rows only. The 
 |---|---|---|
 | Question it answers | *How much did I spend?* | *What did I waste, and how do I stop?* |
 | Daily / monthly / session spend | ✅ excellent | ✅ |
-| Agents supported | ~19 | 12 (see below) |
+| Agents supported | ~19 | 16 (see below) |
 | Live status line, billing blocks | ✅ | ❌ |
 | Waste detection (cache rebuilds, loops, re-reads, giant outputs) | ❌ | ✅ with counterfactual $ estimates and fixes |
 | Why a cache miss happened (you paused / long tool / prefix change / model switch) | ❌ | ✅ |
@@ -115,8 +115,14 @@ Each parser declares what its log format contains. A waste check only runs when 
 | GitHub Copilot CLI | 🧪 experimental | ❌ no per-request tokens on disk | ✅ | ✅ | ✅ | `~/.copilot/session-state` |
 | Factory Droid | 🧪 experimental | ❌ session totals only | ◐ if transcript has tool blocks | ◐ | ◐ | `~/.factory/sessions` |
 | Amp | 🧪 experimental | ✅ | ◐ tool-block shape unverified | ◐ | ◐ | `~/.local/share/amp/threads` |
+| pi (coding agent) | 🧪 experimental | ✅ | ✅ | ✅ | ✅ | `~/.pi/agent/sessions` |
+| Goose | 🧪 experimental | ✅ (◐ older sessions have totals only) | ✅ | ✅ | ✅ | `~/.local/share/goose/sessions/sessions.db` (SQLite, Node 22.13+) |
+| Kimi CLI | 🧪 experimental | ✅ | ✅ | ✅ | ✅ | `~/.kimi/sessions` (model taken from `config.toml`; Kimi prices not in the table yet) |
+| Aider | 🧪 experimental | ❌ no per-request timestamps; spend only | ❌ no tool calls | ❌ | ❌ | `.aider.chat.history.md` in the current directory |
 
 *Experimental* means the parser was built from the agent's source code and docs, cross-checked against other open-source parsers, and tested on synthetic fixtures, but nobody has run it on a real user's logs yet. **If you use one of these agents, please run `npx @mintwork/tokenscope --source <agent>` and [open an issue](.github/ISSUE_TEMPLATE/sample-logs.yml) with a sanitized sample** if the numbers look off. That's how a parser becomes *verified*.
+
+Not supported: **Cursor** keeps usage on its servers (no local per-request log to read without network calls), and **Antigravity** has no plain session log on disk (its usage comes from the running app). Kimi Code (`~/.kimi-code`, a newer format) is not read yet.
 
 VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf, VSCodium, Positron, Antigravity, Trae and Kiro on macOS, Linux (including `~/.vscode-server`) and Windows. Run `npx @mintwork/tokenscope --list-sources` to see what was found where.
 
@@ -160,7 +166,7 @@ npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number in
 npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
 ```
 
-Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`).
+Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`, `pi`, `goose`, `kimi`, `aider`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `GOOSE_PATH_ROOT`, `KIMI_SHARE_DIR`, `AIDER_CHAT_HISTORY_FILE`). Aider has no central log store: point `--path aider=<repo or history file>` at your repos.
 
 ## How costs are computed
 
@@ -183,7 +189,8 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 ## Roadmap
 
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
-- [ ] More agents: Cursor, Aider, Goose, Antigravity, pi-agent, Kimi
+- [x] More agents (experimental): pi, Goose, Kimi CLI, Aider
+- [ ] More agents: Cursor and Antigravity (no local per-request logs), Kimi Code
 - [ ] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
 - [ ] CI mode for headless agent runs (`--fail-over 20` dollars of waste)
 - [ ] More detectors: context bloat before compaction, unused tool definitions, over-thinking on trivial turns, failed-edit retry storms
@@ -202,7 +209,7 @@ npm run demo:visuals  # re-render docs/demo.png and docs/demo.gif (needs Google 
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). **Never commit real session logs.** They contain your prompts, code and secrets.
 
-Parsers for agents other than Claude Code were written from each agent's source and cross-checked against [ccusage](https://github.com/ccusage/ccusage), [better-ccusage](https://github.com/cobra91/better-ccusage) and [splitrail](https://github.com/Piebald-AI/splitrail) (all MIT). Thank you to their authors. See [NOTICE](NOTICE).
+Parsers for agents other than Claude Code were written from each agent's source and cross-checked against [ccusage](https://github.com/ccusage/ccusage), [better-ccusage](https://github.com/cobra91/better-ccusage), [splitrail](https://github.com/Piebald-AI/splitrail) and [tokscale](https://github.com/junhoyeo/tokscale) (all MIT). Thank you to their authors. See [NOTICE](NOTICE).
 
 ## License
 

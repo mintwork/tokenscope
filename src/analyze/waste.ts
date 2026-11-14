@@ -62,6 +62,10 @@ const MEMORY_FILE: Partial<Record<SourceId, string>> = {
   'copilot-cli': '.github/copilot-instructions.md',
   droid: 'AGENTS.md',
   amp: 'AGENTS.md',
+  pi: 'AGENTS.md',
+  goose: '.goosehints',
+  kimi: 'AGENTS.md',
+  aider: 'CONVENTIONS.md',
 };
 const memFile = (s: SourceId) => MEMORY_FILE[s] ?? 'AGENTS.md';
 

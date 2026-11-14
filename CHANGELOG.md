@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Experimental parsers (built from each agent's source and docs, tested on synthetic fixtures, not yet run on real
+  logs): **pi** coding agent (`~/.pi/agent/sessions`), **Goose** (`sessions.db` usage ledger, SQLite, Node 22.13+),
+  **Kimi CLI** (`~/.kimi/sessions/*/wire.jsonl`, with subagents) and **Aider** (`.aider.chat.history.md`, spend only:
+  no per-request timestamps or tool calls, so no waste check runs). Cursor and Antigravity are not supported: neither
+  keeps a per-request log on disk.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed

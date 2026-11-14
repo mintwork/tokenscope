@@ -139,7 +139,7 @@ describe('cli', () => {
   }
   it.skipIf(!built)('--list-sources prints every agent', () => {
     const out = execFileSync(process.execPath, [dist, '--list-sources'], { encoding: 'utf8', env: { ...process.env, HOME: os.tmpdir(), USERPROFILE: os.tmpdir() } });
-    for (const id of ['claude-code', 'codex', 'opencode', 'droid', 'amp']) expect(out).toContain(id);
+    for (const id of ['claude-code', 'codex', 'opencode', 'droid', 'amp', 'pi', 'goose', 'kimi', 'aider']) expect(out).toContain(id);
   });
 });
 
@@ -320,5 +320,142 @@ describe('copilot cli parser (experimental)', async () => {
     const cov = r.coverage[0];
     expect(cov.detectors.find((d) => d.kind === 'cache-miss')!.missing).toContain('per-request token usage');
     expect(calls(s).flatMap((c) => c.toolCalls).find((t) => t.name === 'bash')!.isError).toBe(true);
+  });
+});
+
+import { aiderParser, aiderTokens } from '../src/parsers/aider.js';
+import { gooseParser } from '../src/parsers/goose.js';
+import { kimiModelFromConfig, kimiParser } from '../src/parsers/kimi.js';
+import { piParser } from '../src/parsers/pi.js';
+
+describe('pi parser (experimental)', async () => {
+  const sessions = await piParser.load(fx('pi/sessions'));
+  const main = sessions.find((s) => s.id === '7a1c0e52-1111-4a2b-9c3d-000000000001')!;
+  const fork = sessions.find((s) => s.id === '7a1c0e52-2222-4a2b-9c3d-000000000002')!;
+
+  it('reads header cwd, session name, turns and per-request usage (cacheWrite -> 5m)', () => {
+    expect(main.project).toBe('widget');
+    expect(main.title).toBe('Fix parse() edge case');
+    expect(main.turns.map((t) => t.prompt)).toEqual(['Why does parse("") throw?', 'ok, fix it']);
+    const cs = calls(main);
+    expect(cs).toHaveLength(7); // 6 assistant messages + 1 cache_warm usage entry
+    expect(cs[0]).toMatchObject({ model: 'claude-sonnet-4-5', reportedCost: 0.035 });
+    expect(cs[0].usage).toMatchObject({ input: 12, output: 80, cacheRead: 0, cacheWrite5m: 9000, cacheWrite1h: 0 });
+    expect(cs[0].toolCalls[0]).toMatchObject({ name: 'read', file: 'src/parse.ts', fileOp: 'read' });
+    expect(cs.find((c) => c.toolCalls[0]?.name === 'edit')!.toolCalls[0]).toMatchObject({ fileOp: 'edit' });
+  });
+
+  it('counts requests copied into a /fork once, and skips a truncated last line', () => {
+    expect(calls(fork).map((c) => c.model)).toEqual(['gpt-5']);
+    expect(calls(fork)[0].usage).toMatchObject({ input: 1500, cacheRead: 9000 });
+  });
+
+  it('finds re-reads and the cache rebuild after a 20-minute pause', () => {
+    const r = buildReport(sessions, new Pricer());
+    expect(r.unknownModels).toEqual([]);
+    expect(r.findings.find((f) => f.kind === 'reread')).toMatchObject({ sessionId: main.id, count: 2 });
+    expect(r.findings.find((f) => f.kind === 'cache-miss')).toMatchObject({ cause: 'pause', count: 1 });
+    expect(r.coverage.find((c) => c.source === 'pi')!.detectors.every((d) => d.status === 'yes')).toBe(true);
+  });
+});
+
+describe('kimi parser (experimental)', async () => {
+  const sessions = await kimiParser.load(fx('kimi/sessions'));
+  const s = sessions[0];
+
+  it('reads the default model from config.toml', () => {
+    expect(kimiModelFromConfig('default_model = "k"\n\n[models.k]\nmodel = "kimi-k2-0905-preview"\n')).toBe('kimi-k2-0905-preview');
+    expect(kimiModelFromConfig('default_model = "plain"\n')).toBe('plain');
+    expect(calls(s)[0].model).toBe('kimi-k2-turbo-preview');
+  });
+
+  it('maps the md5 work-dir folder back to the project via kimi.json', () => {
+    expect(sessions).toHaveLength(1);
+    expect(s).toMatchObject({ id: '5f0c9a10-3b2d-4e6f-8a1b-2c3d4e5f6a7b', project: 'widget', title: 'Make the tests pass' });
+  });
+
+  it('one request per step, de-duplicates StatusUpdates by message id', () => {
+    const cs = calls(s);
+    expect(cs).toHaveLength(5);
+    expect(cs[0].usage).toMatchObject({ input: 300, output: 60, cacheRead: 12000, cacheWrite5m: 0 });
+    expect(cs[0].toolCalls[0]).toMatchObject({ name: 'Shell', target: 'npm test', isError: true });
+  });
+
+  it('attaches the subagent wire to its Agent call (not the mirrored SubagentEvent usage)', () => {
+    const agent = calls(s).flatMap((c) => c.toolCalls).find((t) => t.name === 'Agent')!;
+    expect(agent.subagent).toMatchObject({ id: 'agent-ag01', isSubagent: true });
+    expect(calls(agent.subagent!)).toHaveLength(2);
+    expect(calls(agent.subagent!)[0].toolCalls[0]).toMatchObject({ name: 'ReadFile', fileOp: 'read' });
+  });
+
+  it('detects the npm test loop; the unpriced model is listed, not guessed', () => {
+    const r = buildReport(sessions, new Pricer());
+    expect(r.findings.find((f) => f.kind === 'loop')).toMatchObject({ count: 3 });
+    expect(r.unknownModels).toEqual(['kimi-k2-turbo-preview']);
+  });
+});
+
+describe('goose parser (experimental, SQLite)', () => {
+  let sqlite: any;
+  try {
+    sqlite = (process as any).getBuiltinModule?.('node:sqlite');
+  } catch {
+    sqlite = undefined;
+  }
+  it.skipIf(!sqlite)('reads the usage ledger per request, tools from messages, totals for old sessions', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'ts-goose-'));
+    const db = new sqlite.DatabaseSync(path.join(dir, 'sessions.db'));
+    db.exec(readFileSync(fx('goose/sessions.sql'), 'utf8'));
+    db.close();
+    const sessions = await gooseParser.load(dir);
+    expect(sessions.map((s) => s.id).sort()).toEqual(['20261001_3', '20261106_1']); // empty session dropped
+    const s = sessions.find((x) => x.id === '20261106_1')!;
+    expect(s).toMatchObject({ project: 'api', title: 'Slow build' });
+    expect(s.turns.map((t) => t.prompt)).toEqual(['Why is the build slow?']);
+    const cs = calls(s);
+    expect(cs).toHaveLength(4);
+    // ledger input includes cache read + write
+    expect(cs[1].usage).toMatchObject({ input: 20, cacheRead: 9000, cacheWrite5m: 14000, output: 40 });
+    expect(cs[0].toolCalls[0]).toMatchObject({ name: 'developer__shell', target: 'cat build.log' });
+    expect(cs[1].toolCalls[0]).toMatchObject({ fileOp: 'read', file: '/Users/demo/code/api/webpack.config.js' });
+    expect(cs[2].toolCalls[0]).toMatchObject({ fileOp: 'edit', isError: true });
+    expect(s.caps.perRequestTokens).toBe(true);
+
+    const old = sessions.find((x) => x.id === '20261001_3')!;
+    expect(old.caps).toMatchObject({ perRequestTokens: false, timestamps: false });
+    expect(calls(old)[0].usage).toMatchObject({ input: 12000, cacheRead: 40000, output: 1500 });
+
+    const r = buildReport(sessions, new Pricer());
+    expect(r.findings.find((f) => f.kind === 'huge-output')).toMatchObject({ sessionId: '20261106_1' });
+    expect(r.unknownModels).toEqual([]);
+  });
+});
+
+describe('aider parser (experimental)', async () => {
+  const sessions = await aiderParser.load(fx('aider'));
+
+  it('parses rounded token counts', () => {
+    expect(aiderTokens('4.2k')).toBe(4200);
+    expect(aiderTokens('12k')).toBe(12000);
+    expect(aiderTokens('950')).toBe(950);
+  });
+
+  it('one session per "chat started" block, one request per Tokens line', () => {
+    expect(sessions).toHaveLength(2);
+    const [a, b] = sessions;
+    expect(a).toMatchObject({ project: 'widget', title: 'add a guard for empty input in parse()' });
+    expect(calls(a).map((c) => c.model)).toEqual(['anthropic/claude-sonnet-4-5', 'anthropic/claude-sonnet-4-5']);
+    expect(calls(a)[0].usage).toMatchObject({ input: 4200, output: 120 });
+    expect(calls(a)[1].usage).toMatchObject({ input: 500, cacheWrite5m: 3100, cacheRead: 8400, output: 950 });
+    expect(calls(a)[1].reportedCost).toBe(0.03);
+    expect(calls(b)[0]).toMatchObject({ model: 'gpt-5', reportedCost: 0.0072 });
+  });
+
+  it('spend only: no waste check can run on these logs', () => {
+    const r = buildReport(sessions, new Pricer());
+    expect(r.unknownModels).toEqual([]);
+    expect(r.totals.cost).toBeGreaterThan(0);
+    expect(r.sessions.every((s) => s.waste === null)).toBe(true);
+    expect(r.coverage[0].detectors.every((d) => d.status === 'no')).toBe(true);
   });
 });
