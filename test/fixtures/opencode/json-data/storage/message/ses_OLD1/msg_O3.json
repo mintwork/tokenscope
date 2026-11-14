@@ -1,0 +1,1 @@
+{"id": "msg_O3", "sessionID": "ses_OLD1", "role": "assistant", "modelID": "gpt-5", "providerID": "openai", "cost": 0, "tokens": {"input": 22000, "output": 300, "reasoning": 0, "cache": {"read": 0, "write": 0}}, "time": {"created": 1735700020000}}

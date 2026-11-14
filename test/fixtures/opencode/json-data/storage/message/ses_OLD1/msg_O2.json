@@ -1,0 +1,1 @@
+{"id": "msg_O2", "sessionID": "ses_OLD1", "role": "assistant", "modelID": "gpt-5", "providerID": "openai", "cost": 0, "tokens": {"input": 20000, "output": 500, "reasoning": 200, "cache": {"read": 0, "write": 0}}, "time": {"created": 1735700002000, "completed": 1735700010000}, "path": {"cwd": "/home/dev/legacy"}}
