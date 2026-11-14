@@ -6,7 +6,7 @@ name: Release
 on:
   release:
     types: [published]
-  # Manual runs build and pack the package (npm publish --dry-run); they never publish.
+  # Manual runs build and pack the package (npm pack --dry-run); they never publish.
   workflow_dispatch:
 
 permissions:
@@ -47,7 +47,7 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           if [ "$GITHUB_EVENT_NAME" != "release" ]; then
             echo "Dry run: would publish $name@$version via trusted publishing (OIDC)"
-            npm publish --access public --dry-run
+            npm pack --dry-run
           elif npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$name@$version is already on npm, skipping publish"
           else
