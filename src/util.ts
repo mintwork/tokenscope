@@ -1,6 +1,7 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
 
 /** Stream a JSONL file, yielding parsed objects and silently skipping malformed lines. */
@@ -133,23 +134,28 @@ export function shellReadTarget(cmd: string): string | undefined {
   return m?.[1];
 }
 
-const READ_TOOLS = new Set(['Read', 'read_file', 'view', 'View', 'ReadFile']);
-const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'write_file', 'edit_file', 'str_replace_based_edit_tool']);
-const SHELL_TOOLS = new Set(['Bash', 'shell', 'exec_command', 'local_shell', 'run_shell_command']);
+// Tool names across agents (Claude Code, Codex, Gemini/Qwen, OpenCode, Cline/Roo/Kilo, Droid, Amp, Copilot)
+const READ_TOOLS = new Set(['Read', 'read', 'read_file', 'readFile', 'view', 'View', 'ReadFile', 'read_many_files']);
+const EDIT_TOOLS = new Set([
+  'Edit', 'edit', 'MultiEdit', 'multiedit', 'Write', 'write', 'NotebookEdit', 'write_file', 'write_to_file', 'edit_file',
+  'create_file', 'Create', 'replace', 'replace_in_file', 'apply_diff', 'insert_content', 'search_and_replace',
+  'str_replace_based_edit_tool', 'str_replace_editor', 'editedExistingFile', 'newFileCreated', 'appliedDiff', 'create', 'ApplyPatch', 'patch',
+]);
+const SHELL_TOOLS = new Set(['Bash', 'bash', 'shell', 'exec_command', 'local_shell', 'run_shell_command', 'Execute', 'execute_command', 'powershell']);
 
 /** Classify a tool call as a file read / edit, returning the full path. */
 export function fileAccess(name: string, input: unknown): { file: string; op: 'read' | 'edit' } | undefined {
   const i = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-  const p = [i.file_path, i.path, i.notebook_path].find((v) => typeof v === 'string') as string | undefined;
+  const p = [i.file_path, i.filePath, i.absolute_path, i.path, i.notebook_path, i.target_file].find((v) => typeof v === 'string') as string | undefined;
   if (READ_TOOLS.has(name) && p) return { file: p, op: 'read' };
   if (EDIT_TOOLS.has(name) && p) return { file: p, op: 'edit' };
-  if (name === 'apply_patch') {
+  if (name === 'apply_patch' || name === 'ApplyPatch' || name === 'patch') {
     const patch = typeof input === 'string' ? input : typeof i.input === 'string' ? i.input : '';
     const m = patch.match(/\*\*\* (?:Update|Add) File: (.+)/);
     if (m) return { file: m[1].trim(), op: 'edit' };
   }
   if (SHELL_TOOLS.has(name)) {
-    const raw = i.command ?? i.cmd ?? input;
+    const raw = i.command ?? i.cmd ?? i.commandLine ?? input;
     const cmd = Array.isArray(raw) ? raw.join(' ') : typeof raw === 'string' ? raw : undefined;
     const f = cmd ? shellReadTarget(cmd) : undefined;
     if (f) return { file: f, op: 'read' };
@@ -174,4 +180,9 @@ export function parseWhen(s: string | undefined, now = Date.now()): number | und
 /** Short content hash for tool results. */
 export function contentHash(c: unknown): string {
   return createHash('sha1').update(typeof c === 'string' ? c : stableStringify(c)).digest('base64').slice(0, 12);
+}
+
+/** "~/x" -> "/home/me/x" */
+export function expandHome(p: string): string {
+  return p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? path.join(os.homedir(), p.slice(1)) : p;
 }

@@ -16,6 +16,7 @@ export interface Rate {
 
 export interface PricingTable {
   updated?: string;
+  sources?: Record<string, string>;
   defaults: { cacheReadMultiplier: number; cacheWrite5mMultiplier: number; cacheWrite1hMultiplier: number; fastMultiplier: number };
   models: Record<string, Rate>;
 }
@@ -49,12 +50,16 @@ export function normalizeModel(id: string): string {
   m = m.replace(/-v\d+(?::\d+)?$/, '');
   m = m.replace(/@\d{8}$/, ''); // vertex
   m = m.replace(/-\d{8}$/, ''); // dated snapshot
+  m = m.replace(/-1m(-internal)?$/, ''); // Copilot long-context suffixes
+  if (m.startsWith('claude-')) m = m.replace(/(\d)\.(\d)/g, '$1-$2'); // "claude-sonnet-4.5" (Copilot) -> "claude-sonnet-4-5"
   return m;
 }
 
 export class Pricer {
   private cache = new Map<string, Rate | null>();
   readonly unknownModels = new Set<string>();
+  /** Models priced from the agent's own recorded cost. */
+  readonly reportedModels = new Set<string>();
   constructor(readonly table: PricingTable = loadPricing()) {}
 
   lookup(model: string): { key: string; rate: Rate } | undefined {
@@ -119,8 +124,31 @@ export class Pricer {
 
   /** Mutates `call.cost` / `call.unpriced`. */
   price(call: ApiCall): void {
+    const u = call.usage;
+    const noTokens = !u.input && !u.output && !u.cacheRead && !u.cacheWrite5m && !u.cacheWrite1h;
+    if (noTokens && typeof call.reportedCost === 'number' && call.reportedCost > 0) {
+      // e.g. a context-condense request recorded only as a cost
+      call.cost = call.reportedCost;
+      call.costSource = 'reported';
+      call.unpriced = false;
+      return;
+    }
     const c = this.costOf(call.model, call.usage, call.fast);
-    call.cost = c ?? 0;
-    call.unpriced = c === undefined;
+    if (c !== undefined) {
+      call.cost = c;
+      call.costSource = 'pricing';
+      call.unpriced = false;
+    } else if (typeof call.reportedCost === 'number' && Number.isFinite(call.reportedCost)) {
+      // unknown model, but the agent recorded what it was charged
+      this.unknownModels.delete(call.model);
+      this.reportedModels.add(call.model);
+      call.cost = call.reportedCost;
+      call.costSource = 'reported';
+      call.unpriced = false;
+    } else {
+      call.cost = 0;
+      call.costSource = 'none';
+      call.unpriced = true;
+    }
   }
 }

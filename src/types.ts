@@ -4,7 +4,50 @@
  * and renderer consumes only these shapes.
  */
 
-export type SourceId = 'claude-code' | 'codex';
+export type SourceId =
+  | 'claude-code'
+  | 'codex'
+  | 'gemini-cli'
+  | 'qwen-code'
+  | 'opencode'
+  | 'kilo-cli'
+  | 'cline'
+  | 'roo-code'
+  | 'kilo-code'
+  | 'copilot-cli'
+  | 'droid'
+  | 'amp';
+
+/**
+ * What a log format can tell us. Waste detectors only run when the data they
+ * need is present - missing data must never be reported as "no waste".
+ */
+export interface Capabilities {
+  /** Token usage per model request (false = only session totals, or none). */
+  perRequestTokens: boolean;
+  /** Cache-read tokens are reported. */
+  cacheReads: boolean;
+  /** Cache-write tokens are reported (Anthropic-style prompt caching). */
+  cacheWrites: boolean;
+  /** Tool calls with names and inputs. */
+  toolCalls: boolean;
+  /** Tool output text (so we can measure its size / identity). */
+  toolOutputs: boolean;
+  /** File paths for read / edit tools. */
+  filePaths: boolean;
+  /** Per-request timestamps (needed to reason about idle gaps). */
+  timestamps: boolean;
+}
+
+export const FULL_CAPS: Capabilities = {
+  perRequestTokens: true,
+  cacheReads: true,
+  cacheWrites: true,
+  toolCalls: true,
+  toolOutputs: true,
+  filePaths: true,
+  timestamps: true,
+};
 
 export interface Usage {
   /** Uncached input tokens. */
@@ -51,8 +94,12 @@ export interface ApiCall {
   cost: number;
   /** Served in fast mode (premium pricing). */
   fast?: boolean;
-  /** True when the model is missing from the pricing table. */
+  /** True when the model is missing from the pricing table and no reported cost exists. */
   unpriced?: boolean;
+  /** Cost the agent itself recorded (USD), used when the model is not in our pricing table. */
+  reportedCost?: number;
+  /** Where `cost` came from. */
+  costSource?: 'pricing' | 'reported' | 'none';
 }
 
 export interface Turn {
@@ -66,6 +113,8 @@ export interface Turn {
 export interface Session {
   id: string;
   source: SourceId;
+  /** What this session's log format provides (set by the parser). */
+  caps: Capabilities;
   /** Human project name (usually the last path segment of the cwd). */
   project: string;
   /** Full working directory, when known. */

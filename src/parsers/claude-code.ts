@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ApiCall, Session, ToolCall, Turn, Usage } from '../types.js';
+import { FULL_CAPS } from '../types.js';
+import { uniq, xdgConfig } from '../paths.js';
 import { contentChars, contentHash, fileAccess, oneLine, parseTime, readJsonl, stableStringify, toolTarget, walk } from '../util.js';
 import type { LoadOptions, Parser } from './types.js';
 
@@ -85,6 +87,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
   const session: Session = {
     id: path.basename(file, '.jsonl'),
     source: 'claude-code',
+    caps: FULL_CAPS,
     project: slugToName(slug),
     file,
     start: 0,
@@ -228,7 +231,14 @@ export function dedupeAcrossSessions(sessions: Session[]): void {
 export const claudeCodeParser: Parser = {
   id: 'claude-code',
   name: 'Claude Code',
-  defaultDir: claudeDefaultDir,
+  verified: true,
+  caps: FULL_CAPS,
+  defaultDirs: () => {
+    const dirs = [claudeDefaultDir()];
+    // newer installs may also use the XDG config dir
+    if (!process.env.CLAUDE_CONFIG_DIR) dirs.push(path.join(xdgConfig(), 'claude', 'projects'));
+    return uniq(dirs);
+  },
   async load(dir: string, opts: LoadOptions = {}): Promise<Session[]> {
     const files = await walk(dir, (p) => p.endsWith('.jsonl'));
     const sessions: Session[] = [];

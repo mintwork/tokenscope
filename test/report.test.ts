@@ -12,7 +12,7 @@ import { parseWhen } from '../src/util.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const load = async () => [
   ...(await claudeCodeParser.load(path.join(here, 'fixtures/claude/projects'))),
-  ...(await codexParser.load(path.join(here, 'fixtures/codex/sessions'))),
+  ...(await codexParser.load(path.join(here, 'fixtures/codex/sessions/2026/11'))),
 ];
 
 describe('buildReport', async () => {
@@ -73,6 +73,8 @@ describe('buildReport', async () => {
       expect(loop).toMatchObject({ sessionId: 'sess-alpha', count: 3 });
       expect(loop.title).toContain('Bash called 3× in a row, same input & same result');
       expect(kinds('repeat')).toHaveLength(0); // the loop is not double-counted
+      expect(loop.certainty).toBe('avoidable');
+      expect(loop.tip).toContain('CLAUDE.md');
     });
     it('detects unchanged re-reads', () => {
       const [r] = kinds('reread');
@@ -87,9 +89,19 @@ describe('buildReport', async () => {
       const [m] = kinds('cache-miss');
       expect(m).toMatchObject({ sessionId: 'sess-alpha', count: 1, tokens: 25000 });
       expect(m.detail).toContain('idle');
+      expect(m).toMatchObject({ cause: 'idle', certainty: 'likely-avoidable', source: 'claude-code' });
+      expect(m.tip).toContain('/clear');
       // Opus 4.5: (6.25 - 0.5) * 25k / 1M
       expect(m.cost).toBeCloseTo(0.14375, 6);
     });
+  });
+
+  it('splits waste into avoidable and likely avoidable, and reports detector coverage', () => {
+    const t = report.totals;
+    expect(t.avoidableCost + t.likelyAvoidableCost).toBeCloseTo(t.wasteCost, 10);
+    const claude = report.coverage.find((c) => c.source === 'claude-code')!;
+    expect(claude.detectors.every((d) => d.status === 'yes')).toBe(true);
+    expect(report.coverage.find((c) => c.source === 'codex')!.detectors.find((d) => d.kind === 'cache-miss')!.status).toBe('yes');
   });
 
   it('renders terminal output without colors', () => {
@@ -97,6 +109,8 @@ describe('buildReport', async () => {
     expect(out).toContain('tokenscope');
     expect(out).toContain('acme-api');
     expect(out).toContain('LOOP');
+    expect(out.indexOf('looks wasted')).toBeLessThan(out.indexOf('Spend')); // waste leads
+    expect(out).toContain('Waste checks');
     expect(out).not.toMatch(/\x1b\[/);
   });
 

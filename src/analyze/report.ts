@@ -4,7 +4,17 @@ import type { Pricer } from '../pricing/index.js';
 import { normalizeModel } from '../pricing/index.js';
 import type { ApiCall, Session, SourceId, ToolCall, Usage } from '../types.js';
 import { addUsage, emptyUsage, estTokens, totalTokens } from '../types.js';
-import { contexts, detectWaste, type Finding, type WasteOptions } from './waste.js';
+import {
+  ALL_KINDS,
+  contexts,
+  detectWaste,
+  detectorAvailable,
+  missingFor,
+  type Finding,
+  type FindingKind,
+  type WasteOptions,
+} from './waste.js';
+import type { Capabilities } from '../types.js';
 
 export interface Breakdown {
   name: string;
@@ -38,7 +48,30 @@ export interface SessionSummary {
   subagentCost: number;
   cacheHitRate: number;
   models: string[];
-  waste: number;
+  /** Estimated waste (USD); null when no waste detector could run on this session's data. */
+  waste: number | null;
+  /** Detectors that could run on this session. */
+  checked: FindingKind[];
+}
+
+export interface DetectorStatus {
+  kind: FindingKind;
+  /** 'yes' = every session supports it, 'partial' = some, 'no' = none. */
+  status: 'yes' | 'partial' | 'no';
+  /** What the logs are missing, when not 'yes'. */
+  missing: string[];
+}
+
+export interface SourceCoverage {
+  source: SourceId;
+  name: string;
+  verified: boolean;
+  sessions: number;
+  cost: number;
+  /** Cost that came from the agent's own recorded cost rather than our pricing table. */
+  reportedCost: number;
+  caps: Capabilities;
+  detectors: DetectorStatus[];
 }
 
 /** Flame-graph node: name, value (USD, self + children), tokens, kind, children. */
@@ -60,8 +93,12 @@ export interface Report {
   generatedAt: string;
   range: { start: number; end: number };
   sources: SourceId[];
+  /** Per-agent data capabilities and which waste detectors could run. */
+  coverage: SourceCoverage[];
   pricingUpdated?: string;
   unknownModels: string[];
+  /** Models priced from the agent's recorded cost because they're not in the pricing table. */
+  reportedModels: string[];
   totals: {
     sessions: number;
     subagents: number;
@@ -74,7 +111,16 @@ export interface Report {
     cacheHitRate: number;
     /** What the same tokens would have cost with no prompt caching at all. */
     costWithoutCache: number;
+    /** All estimated waste (avoidable + likely avoidable). */
     wasteCost: number;
+    /** Clear-cut waste: identical calls/results, unchanged re-reads. */
+    avoidableCost: number;
+    /** Usually waste, but arguable: cache rebuilds after breaks, huge outputs. */
+    likelyAvoidableCost: number;
+    /** Sessions where at least one detector could not run (missing data). */
+    partiallyCheckedSessions: number;
+    /** Sessions where no detector could run at all. */
+    uncheckedSessions: number;
   };
   byProject: Breakdown[];
   byModel: Breakdown[];
@@ -89,6 +135,8 @@ export interface Report {
 
 export interface BuildOptions {
   waste?: Partial<WasteOptions>;
+  /** Display info per source (name, verified) - defaults to the id. */
+  sourceInfo?: Partial<Record<SourceId, { name: string; verified: boolean }>>;
   redact?: boolean;
   /** Max call nodes per turn in the flame graph before collapsing. */
   maxCallsPerTurn?: number;
@@ -257,6 +305,18 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
   const projectSessions = new Map<string, number>();
 
   const findings = detectWaste(sessions, pricer, opts.waste);
+  let partially = 0;
+  let unchecked = 0;
+  type CovAcc = Omit<SourceCoverage, 'caps' | 'detectors'> & { capsList: Capabilities[] };
+  const covMap = new Map<SourceId, CovAcc>();
+  const covBySource = (s: Session): CovAcc => {
+    let c = covMap.get(s.source);
+    if (!c) {
+      const info = opts.sourceInfo?.[s.source];
+      covMap.set(s.source, (c = { source: s.source, name: info?.name ?? s.source, verified: info?.verified ?? false, sessions: 0, cost: 0, reportedCost: 0, capsList: [] }));
+    }
+    return c;
+  };
   const wasteBySession = new Map<string, number>();
   for (const f of findings) wasteBySession.set(f.sessionId, (wasteBySession.get(f.sessionId) ?? 0) + f.cost);
 
@@ -269,7 +329,9 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
     const ctxs = contexts(s);
     subagents += ctxs.length - 1;
     for (const ctx of ctxs) turns += ctx.session.turns.length;
+    let sReported = 0;
     forEachCall(s, (c, owner) => {
+      if (c.costSource === 'reported') sReported += c.cost;
       calls++;
       sCalls++;
       cost += c.cost;
@@ -305,6 +367,14 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
       }
     });
     projectSessions.set(s.project, (projectSessions.get(s.project) ?? 0) + 1);
+    const checked = ALL_KINDS.filter((k) => detectorAvailable(k, s.caps));
+    if (checked.length < ALL_KINDS.length) partially++;
+    if (!checked.length) unchecked++;
+    const cov = covBySource(s);
+    cov.sessions++;
+    cov.cost += sc;
+    cov.reportedCost += sReported;
+    cov.capsList.push(s.caps);
     summaries.push({
       id: s.id,
       source: s.source,
@@ -320,7 +390,8 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
       subagentCost: subCost,
       cacheHitRate: cacheHitRate(su),
       models: [...models],
-      waste: wasteBySession.get(s.id) ?? 0,
+      waste: checked.length ? wasteBySession.get(s.id) ?? 0 : null,
+      checked,
     });
   }
 
@@ -346,8 +417,23 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
     generatedAt: new Date().toISOString(),
     range: { start: start === Infinity ? 0 : start, end },
     sources: [...new Set(sessions.map((s) => s.source))],
+    coverage: [...covMap.values()]
+      .sort((a, b) => b.cost - a.cost)
+      .map(({ capsList, ...c }) => {
+        const caps = Object.fromEntries(
+          (Object.keys(capsList[0]) as Array<keyof Capabilities>).map((k) => [k, capsList.every((x) => x[k])]),
+        ) as unknown as Capabilities;
+        const detectors: DetectorStatus[] = ALL_KINDS.map((kind) => {
+          const n = capsList.filter((x) => detectorAvailable(kind, x)).length;
+          const status = n === capsList.length ? 'yes' : n === 0 ? 'no' : 'partial';
+          const worst = capsList.find((x) => !detectorAvailable(kind, x));
+          return { kind, status, missing: worst ? missingFor(kind, worst) : [] };
+        });
+        return { ...c, caps, detectors };
+      }),
     pricingUpdated: pricer.table.updated,
     unknownModels: [...pricer.unknownModels],
+    reportedModels: [...pricer.reportedModels],
     totals: {
       sessions: sessions.length,
       subagents,
@@ -360,6 +446,10 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
       cacheHitRate: cacheHitRate(totals),
       costWithoutCache,
       wasteCost: findings.reduce((n, f) => n + f.cost, 0),
+      avoidableCost: findings.filter((f) => f.certainty === 'avoidable').reduce((n, f) => n + f.cost, 0),
+      likelyAvoidableCost: findings.filter((f) => f.certainty === 'likely-avoidable').reduce((n, f) => n + f.cost, 0),
+      partiallyCheckedSessions: partially,
+      uncheckedSessions: unchecked,
     },
     byProject: projects,
     byModel: sortCost([...byModel.values()]),
