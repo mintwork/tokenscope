@@ -5,6 +5,7 @@ name: Release
 on:
   release:
     types: [published]
+  # Manual runs only check npm auth and pack the package; they never publish.
   workflow_dispatch:
 
 permissions:
@@ -45,7 +46,10 @@ jobs:
         run: |
           name="$(node -p "require('./package.json').name")"
           version="$(node -p "require('./package.json').version")"
-          if npm view "$name@$version" version >/dev/null 2>&1; then
+          if [ "$GITHUB_EVENT_NAME" != "release" ]; then
+            echo "Dry run: npm user is $(npm whoami)"
+            npm publish --provenance --access public --dry-run
+          elif npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$name@$version is already on npm, skipping publish"
           else
             npm publish --provenance --access public
