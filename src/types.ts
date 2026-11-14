@@ -37,6 +37,14 @@ export interface Capabilities {
   filePaths: boolean;
   /** Per-request timestamps (needed to reason about idle gaps). */
   timestamps: boolean;
+  /** Compaction events with the context size before and after (Claude Code `compact_boundary`). */
+  compactions?: boolean;
+  /** The tool definitions (schemas) sent with each request. */
+  toolDefinitions?: boolean;
+  /** Size of each tool call's input and of the visible reply, to estimate hidden reasoning tokens. */
+  toolInputs?: boolean;
+  /** Tool error messages in a form we can recognise as a failed file edit. */
+  editErrors?: boolean;
 }
 
 export const FULL_CAPS: Capabilities = {
@@ -81,6 +89,10 @@ export interface ToolCall {
   /** Short hash of the tool result, to tell "same call, same answer" from legit re-runs. */
   resultHash?: string;
   isError: boolean;
+  /** Start of the tool's error message (only when `isError`), to tell failed edits from permission denials. */
+  errorText?: string;
+  /** Characters of the tool call's input (arguments), when the log records it. */
+  inputChars?: number;
   /** Subagent session spawned by this call (Claude Code `Agent`/`Task` tool). */
   subagent?: Session;
 }
@@ -102,6 +114,27 @@ export interface ApiCall {
   reportedCost?: number;
   /** Where `cost` came from. */
   costSource?: 'pricing' | 'reported' | 'none';
+  /** Characters of visible output (text + tool call inputs); the rest of `usage.output` is reasoning. */
+  visibleChars?: number;
+  /** Key into `Session.toolSets`: the tool definitions sent with this request. */
+  toolSet?: string;
+}
+
+/** A tool definition sent to the model (name and approximate size of its schema). */
+export interface ToolDef {
+  name: string;
+  /** Estimated tokens of the definition (JSON chars ÷ 4). */
+  tokens: number;
+  /** Loaded on demand (tool search / `defer_loading`), so not in the prompt until used. */
+  deferred: boolean;
+}
+
+/** A context compaction: the history was summarized, shrinking the context from `pre` to `post` tokens. */
+export interface Compaction {
+  timestamp: number;
+  pre: number;
+  post: number;
+  trigger?: string;
 }
 
 export interface Turn {
@@ -130,6 +163,10 @@ export interface Session {
   agentDescription?: string;
   agentType?: string;
   isSubagent?: boolean;
+  /** Compaction events in this context (not its subagents). */
+  compactions?: Compaction[];
+  /** Tool definition sets referenced by `ApiCall.toolSet`. */
+  toolSets?: Record<string, ToolDef[]>;
 }
 
 export const emptyUsage = (): Usage => ({

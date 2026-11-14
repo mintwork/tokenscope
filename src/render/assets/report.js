@@ -67,7 +67,7 @@
       '</div><div class="sub">' + esc(k.sub) + '</div></div>';
   }).join('');
 
-  var KIND = { loop: 'Loops', repeat: 'Repeated calls', reread: 'Unchanged re-reads', 'huge-output': 'Huge outputs', 'cache-miss': 'Cache rebuilds' };
+  var KIND = { loop: 'Loops', repeat: 'Repeated calls', reread: 'Unchanged re-reads', 'huge-output': 'Huge outputs', 'cache-miss': 'Cache rebuilds', 'edit-retry': 'Failed-edit retries', 'context-bloat': 'Context bloat', 'unused-tools': 'Unused tool defs', overthinking: 'Over-thinking' };
 
   /* ---------- tooltip ---------- */
   var tip = $('#tip');
@@ -403,8 +403,8 @@
   }
 
   /* ---------- waste overview ---------- */
-  var KIND_ORDER = ['cache-miss', 'loop', 'repeat', 'reread', 'huge-output'];
-  var KIND_COLOR = { 'cache-miss': '--s-edit', loop: '--s-agent', repeat: '--s-web', reread: '--s-read', 'huge-output': '--s-shell' };
+  var KIND_ORDER = ['cache-miss', 'loop', 'repeat', 'reread', 'huge-output', 'edit-retry', 'context-bloat', 'unused-tools', 'overthinking'];
+  var KIND_COLOR = { 'cache-miss': '--s-edit', loop: '--s-agent', repeat: '--s-web', reread: '--s-read', 'huge-output': '--s-shell', 'edit-retry': '--s-agent', 'context-bloat': '--s-shell', 'unused-tools': '--s-web', overthinking: '--s-read' };
   function renderWasteOverview() {
     var by = {};
     R.findings.forEach(function (f) {
@@ -423,7 +423,7 @@
       var cov = R.coverage.map(function (c) { return c.detectors.find(function (d) { return d.kind === k; }); });
       var none = cov.every(function (d) { return d && d.status === 'no'; });
       var value = b ? usd(b.cost - b.likelyCost) + (b.likelyCost >= 0.01 ? ' <span class="d">+ ' + usd(b.likelyCost) + ' likely</span>' : '') : none ? 'not checked' : '$0.00';
-      return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + (b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'logs lack the data' : 'none found') + '</div></div>' +
+      return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + (b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'not checked: logs lack the data' : 'none found') + '</div></div>' +
         '<div class="wbar"><div style="width:' + (b ? Math.max(1, (b.cost / max) * 100) : 0) + '%;background:var(' + KIND_COLOR[k] + ')"></div></div><div class="num"><b>' + value + '</b></div></div>' +
         (b ? Object.keys(b.tips).map(function (k) { return b.tips[k]; }).sort(function (x, y) { return y.cost - x.cost; }).slice(0, 2).map(function (t) { return '<div class="wtip">↳ ' + esc(t.tip) + '</div>'; }).join('') : '');
     }).join('');
