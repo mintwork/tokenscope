@@ -1,0 +1,1 @@
+{"providerLock": "openai", "providerLockTimestamp": "2026-10-03T10:00:00.000Z", "tokenUsage": {"inputTokens": 5000, "outputTokens": 1000, "cacheCreationTokens": 0, "cacheReadTokens": 20000, "thinkingTokens": 0}}
