@@ -1,0 +1,10 @@
+[
+ {
+  "id": "1793491200000",
+  "ts": 1793491217000,
+  "task": "Add a /health endpoint",
+  "cwdOnTaskInitialization": "/home/demo/app",
+  "tokensIn": 2902,
+  "tokensOut": 635
+ }
+]

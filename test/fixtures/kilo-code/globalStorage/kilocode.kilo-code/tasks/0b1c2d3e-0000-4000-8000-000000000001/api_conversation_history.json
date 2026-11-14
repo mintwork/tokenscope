@@ -1,0 +1,12 @@
+[
+ {
+  "role": "user",
+  "ts": 1793491200500,
+  "content": [
+   {
+    "type": "text",
+    "text": "<environment_details><model>gpt-5</model></environment_details>"
+   }
+  ]
+ }
+]

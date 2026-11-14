@@ -1,0 +1,14 @@
+[
+ {
+  "ts": 1793491200000,
+  "type": "say",
+  "say": "text",
+  "text": "Explain the build"
+ },
+ {
+  "ts": 1793491201000,
+  "type": "say",
+  "say": "api_req_started",
+  "text": "{\"apiProtocol\": \"openai\", \"tokensIn\": 20400, \"tokensOut\": 300, \"cacheWrites\": 0, \"cacheReads\": 19800, \"cost\": 0.0091, \"usageMissing\": false, \"inferenceProvider\": \"Fireworks\"}"
+ }
+]

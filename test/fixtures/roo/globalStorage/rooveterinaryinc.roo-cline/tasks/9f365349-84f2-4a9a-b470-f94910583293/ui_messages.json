@@ -1,0 +1,43 @@
+[
+ {
+  "ts": 1793491200000,
+  "type": "say",
+  "say": "text",
+  "text": "Fix the flaky date test"
+ },
+ {
+  "ts": 1793491200400,
+  "type": "say",
+  "say": "api_req_started",
+  "text": "{\"apiProtocol\": \"anthropic\", \"tokensIn\": 15230, \"tokensOut\": 210, \"cacheWrites\": 15200, \"cacheReads\": 0, \"cost\": 0.0602}"
+ },
+ {
+  "ts": 1793491203000,
+  "type": "ask",
+  "ask": "tool",
+  "text": "{\"tool\": \"appliedDiff\", \"path\": \"test/date.test.ts\", \"diff\": \"<<<<<<< SEARCH\"}"
+ },
+ {
+  "ts": 1793491209000,
+  "type": "say",
+  "say": "api_req_started",
+  "text": "{\"apiProtocol\": \"anthropic\", \"tokensIn\": 15700, \"tokensOut\": 60, \"cacheWrites\": 480, \"cacheReads\": 15200, \"cost\": 0.0073}"
+ },
+ {
+  "ts": 1793491209500,
+  "type": "say",
+  "say": "condense_context",
+  "contextCondense": {
+   "cost": 0.02,
+   "prevContextTokens": 15700,
+   "newContextTokens": 2000,
+   "summary": "..."
+  }
+ },
+ {
+  "ts": 1793491210000,
+  "type": "ask",
+  "ask": "completion_result",
+  "text": ""
+ }
+]

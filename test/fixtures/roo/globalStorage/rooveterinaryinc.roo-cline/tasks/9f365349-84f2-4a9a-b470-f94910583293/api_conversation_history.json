@@ -1,0 +1,47 @@
+[
+ {
+  "role": "user",
+  "ts": 1793491200300,
+  "content": [
+   {
+    "type": "text",
+    "text": "<task>Fix the flaky date test</task>"
+   },
+   {
+    "type": "text",
+    "text": "<environment_details>\n# Current Mode\n<slug>code</slug>\n<model>claude-sonnet-4-5</model>\n# Current Workspace Directory (/home/demo/app) Files\n</environment_details>"
+   }
+  ]
+ },
+ {
+  "role": "assistant",
+  "ts": 1793491202000,
+  "content": [
+   {
+    "type": "tool_use",
+    "id": "tu_r1",
+    "name": "apply_diff",
+    "input": {
+     "path": "test/date.test.ts",
+     "diff": "..."
+    }
+   }
+  ]
+ },
+ {
+  "role": "user",
+  "ts": 1793491204000,
+  "content": [
+   {
+    "type": "tool_result",
+    "tool_use_id": "tu_r1",
+    "content": [
+     {
+      "type": "text",
+      "text": "Changes applied"
+     }
+    ]
+   }
+  ]
+ }
+]

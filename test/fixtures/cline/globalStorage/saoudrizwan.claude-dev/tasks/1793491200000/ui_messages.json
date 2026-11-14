@@ -1,0 +1,84 @@
+[
+ {
+  "ts": 1793491200000,
+  "type": "say",
+  "say": "task",
+  "text": "Add a /health endpoint"
+ },
+ {
+  "ts": 1793491200500,
+  "type": "say",
+  "say": "api_req_started",
+  "modelInfo": {
+   "modelId": "claude-sonnet-4-5",
+   "providerId": "anthropic",
+   "mode": "act"
+  },
+  "text": "{\"request\": \"<task>\\nAdd a /health endpoint\\n</task>\\n\\nLoading...\"}",
+  "partial": true
+ },
+ {
+  "ts": 1793491200500,
+  "type": "say",
+  "say": "api_req_started",
+  "modelInfo": {
+   "modelId": "claude-sonnet-4-5",
+   "providerId": "anthropic",
+   "mode": "act"
+  },
+  "text": "{\"request\": \"<task>..\", \"tokensIn\": 12, \"tokensOut\": 180, \"cacheWrites\": 9100, \"cacheReads\": 0, \"cost\": 0.0369}",
+  "conversationHistoryIndex": 0
+ },
+ {
+  "ts": 1793491203000,
+  "type": "say",
+  "say": "tool",
+  "text": "{\"tool\": \"readFile\", \"path\": \"src/server.ts\", \"content\": \"/home/demo/app/src/server.ts\"}"
+ },
+ {
+  "ts": 1793491204000,
+  "type": "say",
+  "say": "api_req_started",
+  "modelInfo": {
+   "modelId": "claude-sonnet-4-5",
+   "providerId": "anthropic",
+   "mode": "act"
+  },
+  "text": "{\"request\": \"[read_file for 'src/server.ts'] Result:\", \"tokensIn\": 850, \"tokensOut\": 95, \"cacheWrites\": 0, \"cacheReads\": 9100, \"cost\": 0.0067}"
+ },
+ {
+  "ts": 1793491206000,
+  "type": "ask",
+  "ask": "command",
+  "text": "npm test"
+ },
+ {
+  "ts": 1793491209000,
+  "type": "say",
+  "say": "command_output",
+  "text": "1 failing"
+ },
+ {
+  "ts": 1793491215000,
+  "type": "say",
+  "say": "user_feedback",
+  "text": "tests still fail"
+ },
+ {
+  "ts": 1793491216000,
+  "type": "say",
+  "say": "api_req_started",
+  "modelInfo": {
+   "modelId": "claude-sonnet-4-5",
+   "providerId": "anthropic",
+   "mode": "act"
+  },
+  "text": "{\"request\": \"..\", \"tokensIn\": 40, \"tokensOut\": 60, \"cacheWrites\": 300, \"cacheReads\": 9900, \"cost\": 0.004, \"cancelReason\": \"user_cancelled\"}"
+ },
+ {
+  "ts": 1793491217000,
+  "type": "say",
+  "say": "subagent_usage",
+  "text": "{\"source\": \"subagents\", \"tokensIn\": 2000, \"tokensOut\": 300, \"cacheWrites\": 0, \"cacheReads\": 0, \"cost\": 0.0105}"
+ }
+]

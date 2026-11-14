@@ -1,0 +1,59 @@
+{
+ "version": 1,
+ "updated_at": "2026-11-01T00:01:00Z",
+ "agent": "lead",
+ "sessionId": "1793491300000_k3f9a",
+ "messages": [
+  {
+   "role": "user",
+   "ts": 1793491300000,
+   "content": [
+    {
+     "type": "text",
+     "text": "Add a /ready endpoint"
+    }
+   ]
+  },
+  {
+   "role": "assistant",
+   "id": "msg_a1",
+   "ts": 1793491304000,
+   "modelInfo": {
+    "id": "claude-sonnet-4-5",
+    "provider": "anthropic"
+   },
+   "metrics": {
+    "inputTokens": 9300,
+    "outputTokens": 120,
+    "cacheReadTokens": 9100,
+    "cacheWriteTokens": 150,
+    "cost": 0.0051
+   },
+   "content": [
+    {
+     "type": "tool_use",
+     "id": "tu_1",
+     "name": "read_files",
+     "input": {
+      "paths": [
+       "src/server.ts"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "role": "user",
+   "ts": 1793491304500,
+   "content": [
+    {
+     "type": "tool_result",
+     "tool_use_id": "tu_1",
+     "name": "read_files",
+     "content": "export const app = 1",
+     "is_error": false
+    }
+   ]
+  }
+ ]
+}

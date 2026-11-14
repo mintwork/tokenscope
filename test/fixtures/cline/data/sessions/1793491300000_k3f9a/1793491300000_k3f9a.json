@@ -1,0 +1,12 @@
+{
+ "version": 1,
+ "session_id": "1793491300000_k3f9a",
+ "source": "vscode",
+ "started_at": "2026-11-01T00:00:00Z",
+ "status": "completed",
+ "provider": "anthropic",
+ "model": "claude-sonnet-4-5",
+ "cwd": "/home/demo/app",
+ "workspace_root": "/home/demo/app",
+ "prompt": "Add a /ready endpoint"
+}

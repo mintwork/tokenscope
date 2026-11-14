@@ -1,0 +1,13 @@
+{
+ "id": "9f365349-84f2-4a9a-b470-f94910583293",
+ "number": 1,
+ "ts": 1793491210000,
+ "task": "Fix the flaky date test",
+ "tokensIn": 30930,
+ "tokensOut": 270,
+ "cacheWrites": 15680,
+ "cacheReads": 15200,
+ "totalCost": 0.0675,
+ "workspace": "/home/demo/app",
+ "mode": "code"
+}
