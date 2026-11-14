@@ -5,9 +5,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { buildReport, filterByTime } from './analyze/report.js';
+import { exceeds, summarize } from './analyze/summary.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
+import { usd } from './render/format.js';
 import { renderTerminal } from './render/terminal.js';
 import type { Session, SourceId } from './types.js';
 import { exists, expandHome, parseWhen } from './util.js';
@@ -34,6 +36,11 @@ Filters
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
                          ${'${SOURCES}'}
 
+CI / headless runs
+  --session <ids>        only these sessions (comma-separated ids or id prefixes)
+  --fail-over <usd>      exit 1 when the avoidable waste (the headline) exceeds <usd>
+  --summary [file]       compact JSON summary for CI (stdout when no file given)
+
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable), e.g. --path gemini-cli=~/backup/gemini
   --dir <dir>            shorthand for --path claude-code=<dir>
@@ -54,7 +61,7 @@ function normalizeArgv(argv: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     out.push(argv[i]);
-    if ((argv[i] === '--html' || argv[i] === '--json') && (i + 1 >= argv.length || argv[i + 1].startsWith('-'))) out.push('');
+    if ((argv[i] === '--html' || argv[i] === '--json' || argv[i] === '--summary') && (i + 1 >= argv.length || argv[i + 1].startsWith('-'))) out.push('');
   }
   return out;
 }
@@ -67,6 +74,9 @@ async function main(rawArgv: string[]): Promise<number> {
     options: {
       html: { type: 'string' },
       json: { type: 'string' },
+      summary: { type: 'string' },
+      session: { type: 'string' },
+      'fail-over': { type: 'string' },
       open: { type: 'boolean' },
       since: { type: 'string' },
       until: { type: 'string' },
@@ -95,6 +105,11 @@ async function main(rawArgv: string[]): Promise<number> {
   }
 
   const since = parseWhen(values.since);
+  let failOver: number | undefined;
+  if (values['fail-over'] !== undefined) {
+    failOver = Number(values['fail-over'].replace(/^\$/, ''));
+    if (!values['fail-over'].trim() || !Number.isFinite(failOver) || failOver < 0) throw new Error(`--fail-over expects a dollar amount like 5 or 0.5, got "${values['fail-over']}"`);
+  }
   const until = parseWhen(values.until);
 
   const overrides = new Map<SourceId, string[]>();
@@ -176,9 +191,13 @@ async function main(rawArgv: string[]): Promise<number> {
     const q = values.project.toLowerCase();
     sessions = sessions.filter((s) => s.project.toLowerCase().includes(q) || (s.projectPath ?? '').toLowerCase().includes(q));
   }
+  if (values.session) {
+    const ids = values.session.split(',').map((x) => x.trim()).filter(Boolean);
+    sessions = sessions.filter((s) => ids.some((id) => s.id === id || s.id.startsWith(id)));
+  }
   sessions = filterByTime(sessions, since, until);
   if (!sessions.length) {
-    process.stderr.write(`No sessions matched in ${scanned.join(', ')}.\n`);
+    process.stderr.write(`No sessions matched${values.session ? ` --session ${values.session}` : ''} in ${scanned.join(', ')}.\n`);
     return 1;
   }
 
@@ -192,6 +211,7 @@ async function main(rawArgv: string[]): Promise<number> {
   const elapsed = Date.now() - t0;
 
   const jsonFlag = values.json !== undefined;
+  const summaryFlag = values.summary !== undefined;
   const htmlFlag = values.html !== undefined;
 
   if (jsonFlag) {
@@ -199,23 +219,32 @@ async function main(rawArgv: string[]): Promise<number> {
     if (values.json) {
       writeFileSync(values.json, json);
       process.stderr.write(`JSON report written to ${values.json}\n`);
-    } else {
-      process.stdout.write(json + '\n');
-      if (!htmlFlag) return 0;
-    }
+    } else process.stdout.write(json + '\n');
+  }
+  if (summaryFlag) {
+    const json = JSON.stringify(summarize(report, { failOver }), null, 2);
+    if (values.summary) {
+      writeFileSync(values.summary, json);
+      process.stderr.write(`JSON summary written to ${values.summary}\n`);
+    } else process.stdout.write(json + '\n');
   }
   if (htmlFlag) {
     const file = values.html || 'tokenscope-report.html';
     writeFileSync(file, renderHtml(report));
     process.stderr.write(`HTML report written to ${path.resolve(file)}\n`);
     if (values.open) openFile(path.resolve(file));
-    if (jsonFlag) return 0;
   }
-  if (!jsonFlag) {
+  // terminal report unless a JSON document goes to stdout (or --json was asked for)
+  if (!jsonFlag && !(summaryFlag && !values.summary)) {
     const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
     const color = !values['no-color'] && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
     process.stdout.write(renderTerminal(report, { color, width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
+  }
+  if (failOver !== undefined) {
+    const msg = `avoidable waste ${usd(report.totals.avoidableCost)} ${exceeds(report, failOver) ? 'exceeds' : 'is within'} --fail-over ${usd(failOver)}`;
+    process.stderr.write(`tokenscope: ${msg}\n`);
+    if (exceeds(report, failOver)) return 1;
   }
   return 0;
 }

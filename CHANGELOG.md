@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **CI mode** for headless agent runs: `--fail-over <usd>` exits 1 when the avoidable waste (the headline) exceeds
+  the amount, `--summary [file]` writes a compact JSON summary (totals, waste by pattern, top findings, the
+  `--fail-over` result), and `--session <ids>` scopes the report to specific sessions (ids or prefixes). The README
+  has a GitHub Actions example.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed

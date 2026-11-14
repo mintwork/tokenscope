@@ -137,6 +137,11 @@ Filters
   -p, --project <text>   only projects whose name/path contains <text>
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
 
+CI / headless runs
+  --session <ids>        only these sessions (comma-separated ids or id prefixes)
+  --fail-over <usd>      exit 1 when the avoidable waste (the headline) exceeds <usd>
+  --summary [file]       compact JSON summary for CI (stdout when no file given)
+
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable)
   --dir <dir>            shorthand for --path claude-code=<dir>
@@ -159,6 +164,38 @@ npx @mintwork/tokenscope -p checkout --html report.html     # one project, as HT
 npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
 npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
 ```
+
+### CI mode for headless agent runs
+
+Run tokenscope after an agent runs in CI to gate on waste. Scope the check to the current run with `--session <id>` (Claude Code's `claude -p --output-format json` prints the `session_id`) or `--since <ISO time>` captured before the run. `--fail-over <usd>` exits 1 when the headline (avoidable waste only; *likely avoidable* is never counted) exceeds the amount, and `--summary` writes a small JSON document (totals, waste by pattern, top findings with fixes, and the `failOver` result) instead of the full report.
+
+```yaml
+# .github/workflows/agent.yml (excerpt)
+      - name: Run the agent headless
+        id: agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "Fix the failing tests" --output-format json > agent.json
+          echo "session=$(jq -r .session_id agent.json)" >> "$GITHUB_OUTPUT"
+      - name: Waste check
+        if: always()
+        env:
+          SESSION: ${{ steps.agent.outputs.session }}
+        run: npx -y @mintwork/tokenscope --session "$SESSION" --summary tokenscope.json --html tokenscope.html --fail-over 2
+      - name: Job summary
+        if: always()
+        run: |
+          jq -r '"### tokenscope: ≈ $\(.avoidableCost) avoidable of $\(.cost)\n" +
+            (.topFindings | map("- **\(.kind)** $\(.cost): \(.title)") | join("\n"))' tokenscope.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tokenscope
+          path: tokenscope.*
+```
+
+Exit codes: `0` ok; `1` when the avoidable waste is over the threshold, on errors, or when no session matched the filters.
 
 Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`).
 
@@ -185,7 +222,7 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
 - [ ] More agents: Cursor, Aider, Goose, Antigravity, pi-agent, Kimi
 - [ ] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
-- [ ] CI mode for headless agent runs (`--fail-over 20` dollars of waste)
+- [x] CI mode for headless agent runs (`--fail-over`, `--summary`, `--session`)
 - [ ] More detectors: context bloat before compaction, unused tool definitions, over-thinking on trivial turns, failed-edit retry storms
 - [ ] Diff two time ranges ("what got more wasteful this week?")
 - [ ] Opt-in pricing updates from a published feed
