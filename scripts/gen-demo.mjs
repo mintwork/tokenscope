@@ -41,14 +41,17 @@ function session(proj, dayOffset, opts) {
   let t = Date.parse('2026-10-20T09:00:00Z') + dayOffset * 86400e3 + int(0, 8) * 3600e3;
   const lines = [];
   const base = (extra) => ({ cwd, sessionId: id, version: '2.0.0', gitBranch: 'main', userType: 'external', isSidechain: false, timestamp: new Date(t).toISOString(), ...extra });
-  let ctx = int(14000, 22000);
+  // long working sessions start with a big context (instructions, a codebase tour, earlier turns)
+  let ctx = opts.ctx0 ? int(opts.ctx0[0], opts.ctx0[1]) : int(14000, 22000);
   let first = true;
+  let lastCall = t; // the cache lives 5 minutes from its last use
   const turns = opts.turns;
   const subagents = [];
   for (let turn = 0; turn < turns; turn++) {
-    t += turn === 0 ? 0 : (rnd() < opts.idleChance ? int(20, 90) : int(1, 4)) * 60e3;
+    // how long you took to read the answer and reply: usually a minute or two, sometimes 6-30 min
+    // (reading a diff, testing by hand, a meeting), and now and then a break of over an hour
+    if (turn > 0) t += (opts.breaks?.includes(turn) ? int(70, 180) : rnd() < opts.idleChance ? int(6, 30) : int(1, 4)) * 60e3;
     lines.push(base({ type: 'user', uuid: `u${msg}-${turn}`, message: { role: 'user', content: turn === 0 ? opts.title : pick(PROMPTS) } }));
-    let idle = turn > 0 && lines.length && opts._lastT && t - opts._lastT > 5 * 60e3;
     const steps = int(opts.steps[0], opts.steps[1]);
     for (let s = 0; s < steps; s++) {
       t += int(4, 40) * 1000;
@@ -66,7 +69,13 @@ function session(proj, dayOffset, opts) {
       else if (r < 0.83 && opts.agents && subagents.length < opts.agents) tools.push({ name: 'Agent', input: { description: pick(['Audit test coverage', 'Research API options', 'Review security of auth flow', 'Map module dependencies']), prompt: 'investigate', subagent_type: 'general-purpose' }, out: 1500, agent: true });
       else if (r < 0.86) tools.push({ name: 'Write', input: { file_path: file, content: 'x' }, out: 100 });
       if (opts.huge && turn === 0 && s === 1) tools.splice(0, 1, { name: 'Bash', input: { command: 'cat logs/server.log' }, out: 240000 });
-      const cacheMiss = first || idle || (opts.idleChance > 0.3 && rnd() < 0.03);
+      // a slow build / test suite the agent waits on in the foreground
+      const slow = opts.slowTools?.find((x) => x.turn === turn && x.step === s);
+      if (slow) tools.splice(0, tools.length, { name: 'Bash', input: { command: slow.command, description: 'Run it' }, out: int(2000, 5000), min: slow.min });
+      // the cache misses when it expired (over 5 min since the last request), or when the prompt
+      // prefix changed mid-session (opts.prefixChanges: [turn, step] pairs)
+      const prefixChange = opts.prefixChanges?.some(([pt, ps]) => pt === turn && ps === s);
+      const cacheMiss = first || t - lastCall > 5 * 60e3 || prefixChange;
       const grow = int(300, 2500);
       const usage = {
         input_tokens: int(1, 8),
@@ -76,12 +85,12 @@ function session(proj, dayOffset, opts) {
         cache_creation: { ephemeral_5m_input_tokens: cacheMiss ? ctx : grow, ephemeral_1h_input_tokens: 0 },
       };
       first = false;
-      idle = false;
+      lastCall = t;
       ctx += grow + Math.round(tools.reduce((n, x) => n + x.out, 0) / 4);
       const content = tools.length ? tools.map((x, i) => ({ type: 'tool_use', id: `${id2}_t${i}`, name: x.name, input: x.input })) : [{ type: 'text', text: 'Done.' }];
       lines.push(base({ type: 'assistant', uuid: `a${id2}`, requestId: `req_${id2}`, message: { id: id2, model, role: 'assistant', type: 'message', content, usage } }));
       tools.forEach((x, i) => {
-        t += 1000;
+        t += x.min ? x.min * 60e3 : 1000;
         const tuid = `${id2}_t${i}`;
         const entry = base({ type: 'user', uuid: `r${tuid}`, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: tuid, content: (x.err ? 'FAIL cart.test.ts ' : tuid + ' ') + 'x'.repeat(x.out), is_error: !!x.err }] } });
         if (x.agent) {
@@ -91,7 +100,6 @@ function session(proj, dayOffset, opts) {
         }
         lines.push(entry);
       });
-      opts._lastT = t;
     }
   }
   lines.push({ type: 'ai-title', aiTitle: opts.title, sessionId: id });
@@ -121,21 +129,24 @@ function session(proj, dayOffset, opts) {
   }
 }
 
+// A month of mostly interactive work. The two big sessions are long, with large contexts and frequent
+// 6-30 min pauses before replying, which is where most real-world cache waste comes from.
 const plan = [
-  [0, 0, { turns: 6, steps: [8, 30], idleChance: 0.2, agents: 2, title: TITLES[0], loop: true }],
-  [0, 2, { turns: 4, steps: [6, 20], idleChance: 0.1, agents: 1, title: TITLES[1] }],
-  [1, 3, { turns: 5, steps: [5, 18], idleChance: 0.15, title: TITLES[2], reread: true }],
-  [2, 4, { turns: 8, steps: [10, 34], idleChance: 0.45, agents: 3, title: TITLES[3], huge: true }],
-  [3, 6, { turns: 3, steps: [5, 14], idleChance: 0.1, title: TITLES[4] }],
-  [1, 8, { turns: 3, steps: [4, 12], idleChance: 0.1, title: TITLES[5] }],
-  [3, 10, { turns: 6, steps: [8, 26], idleChance: 0.3, agents: 2, title: TITLES[6] }],
+  [0, 0, { turns: 6, steps: [8, 24], idleChance: 0.2, agents: 2, title: TITLES[0], loop: true }],
+  [0, 2, { turns: 4, steps: [6, 16], idleChance: 0.1, agents: 1, title: TITLES[1] }],
+  [1, 3, { turns: 5, steps: [5, 14], idleChance: 0.15, title: TITLES[2], reread: true }],
+  [2, 4, { turns: 12, steps: [8, 18], idleChance: 0.65, ctx0: [150000, 180000], agents: 3, title: TITLES[3], huge: true, breaks: [7] }],
+  [3, 6, { turns: 3, steps: [5, 12], idleChance: 0.1, title: TITLES[4] }],
+  [1, 8, { turns: 3, steps: [4, 10], idleChance: 0.1, title: TITLES[5], prefixChanges: [[1, 2]] }],
+  [3, 10, { turns: 6, steps: [8, 20], idleChance: 0.3, agents: 2, title: TITLES[6] }],
   [4, 11, { turns: 3, steps: [4, 10], idleChance: 0.1, title: TITLES[7] }],
-  [0, 13, { turns: 7, steps: [10, 30], idleChance: 0.35, agents: 2, title: TITLES[8], reread: true }],
+  [0, 13, { turns: 10, steps: [8, 18], idleChance: 0.7, ctx0: [130000, 160000], agents: 2, title: TITLES[8], reread: true, breaks: [5],
+    slowTools: [{ turn: 2, step: 3, command: 'npm run build', min: 9 }, { turn: 4, step: 2, command: 'npm run test:e2e', min: 12 }, { turn: 7, step: 4, command: 'npm run build', min: 8 }] }],
   [2, 15, { turns: 2, steps: [3, 8], idleChance: 0, title: TITLES[9] }],
-  [0, 17, { turns: 4, steps: [6, 22], idleChance: 0.2, agents: 1, title: TITLES[10], loop: true }],
-  [2, 19, { turns: 4, steps: [6, 18], idleChance: 0.2, title: TITLES[11] }],
-  [4, 21, { turns: 3, steps: [4, 12], idleChance: 0.1, title: TITLES[12] }],
-  [1, 23, { turns: 5, steps: [6, 20], idleChance: 0.15, agents: 1, title: TITLES[13] }],
+  [0, 17, { turns: 4, steps: [6, 18], idleChance: 0.2, agents: 1, title: TITLES[10], loop: true }],
+  [2, 19, { turns: 4, steps: [6, 16], idleChance: 0.2, title: TITLES[11] }],
+  [4, 21, { turns: 3, steps: [4, 10], idleChance: 0.1, title: TITLES[12] }],
+  [1, 23, { turns: 5, steps: [6, 16], idleChance: 0.15, agents: 1, title: TITLES[13] }],
 ];
 for (const [p, day, opts] of plan) session(PROJECTS[p], day, opts);
 console.error(`synthetic demo logs written to ${out}`);

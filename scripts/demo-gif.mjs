@@ -75,7 +75,7 @@ try {
     return n;
   }, html.length);
   for (let i = 1; i <= firstScreen; i++) await shot({ typed: COMMAND.length, shown: i, cursor: false }, 55);
-  frames[frames.length - 1].ms = 5200;
+  frames[frames.length - 1].ms = 6800;
   // The rest scrolls past, then hold on the spend summary at the bottom.
   for (let i = firstScreen + 1; i <= html.length; i += 3) await shot({ typed: COMMAND.length, shown: Math.min(i + 2, html.length), cursor: false }, 60);
   for (let i = 0; i < 3; i++) {

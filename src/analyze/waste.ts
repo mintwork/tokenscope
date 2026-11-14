@@ -459,7 +459,8 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
                   byTool.set(label, e);
                 }
                 const top = [...byTool.entries()].sort((a, b) => b[1].min - a[1].min).slice(0, 3);
-                detail = `The cache expired ${list.length}× while the agent waited 5-60 min on a tool (or on your approval): ${top.map(([l, e]) => `${l} ${Math.round(e.min)} min${e.n > 1 ? ` ×${e.n}` : ''}`).join(', ')}. Net saving with a 1-hour TTL ≈ ${usd(cost)} after the 1h write premium.`;
+                // lead with the tools, so a truncated terminal line still names the command
+                detail = `Waited on ${top.map(([l, e]) => `${l} ${Math.round(e.min)} min${e.n > 1 ? ` ×${e.n}` : ''}`).join(', ')}: the cache expired ${list.length}× while the agent waited 5-60 min on a tool (or on your approval). Net saving with a 1-hour TTL ≈ ${usd(cost)} after the 1h write premium.`;
               }
               push({
                 kind: 'cache-miss',
