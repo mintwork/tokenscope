@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`tokenscope diff`** compares two time ranges ("what got more wasteful this week?"): `--from` / `--to` /
+  `--until`, defaulting to the last 7 days vs the 7 before, or `--since <when> --compare` for the same-length range
+  just before. It lines up spend, the avoidable headline and its share of spend, likely-avoidable waste, cache hit
+  rate, waste by pattern, projects that got more or less wasteful, and spend by model. Output is terminal or `--json`.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed

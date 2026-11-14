@@ -124,6 +124,7 @@ VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf
 
 ```text
 tokenscope [options]
+tokenscope diff [--from 14d] [--to 7d] [options]
 
 Output
   (default)              terminal summary: waste first, then spend
@@ -136,6 +137,11 @@ Filters
   --until <when>         same formats
   -p, --project <text>   only projects whose name/path contains <text>
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
+
+Compare two time ranges
+  diff                   compare [--from, --to) with [--to, --until or now] (default: the last 7 days vs the 7 before)
+  --from <when> / --to <when>
+  --compare              with --since: compare that range with the one of equal length just before it
 
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable)
@@ -158,7 +164,11 @@ npx @mintwork/tokenscope --path opencode=~/backup/opencode  # read from somewher
 npx @mintwork/tokenscope -p checkout --html report.html     # one project, as HTML
 npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
 npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
+npx @mintwork/tokenscope diff                               # what got more wasteful this week?
+npx @mintwork/tokenscope --since 30d --compare --json       # last 30 days vs the 30 before, as JSON
 ```
+
+`diff` builds a full report for each range, with the same detectors and prices, and lines them up: spend, the headline waste and its share of spend, likely-avoidable waste, cache hit rate, waste by pattern (cache rebuilds split by cause), the projects that got more or less wasteful, and spend by model. `--json` gives the same diff as data. Sessions that span the boundary are split at it.
 
 Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`).
 
@@ -187,7 +197,7 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 - [ ] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
 - [ ] CI mode for headless agent runs (`--fail-over 20` dollars of waste)
 - [ ] More detectors: context bloat before compaction, unused tool definitions, over-thinking on trivial turns, failed-edit retry storms
-- [ ] Diff two time ranges ("what got more wasteful this week?")
+- [x] Diff two time ranges (`tokenscope diff`, `--compare`)
 - [ ] Opt-in pricing updates from a published feed
 
 ## Development

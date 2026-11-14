@@ -4,10 +4,12 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { diffRanges, resolveRanges } from './analyze/diff.js';
 import { buildReport, filterByTime } from './analyze/report.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
+import { renderDiffTerminal } from './render/diff.js';
 import { renderTerminal } from './render/terminal.js';
 import type { Session, SourceId } from './types.js';
 import { exists, expandHome, parseWhen } from './util.js';
@@ -20,6 +22,7 @@ tokenscope ${VERSION} - find the tokens (and money) your AI coding agent wasted
 
 Usage
   npx @mintwork/tokenscope [options]
+  npx @mintwork/tokenscope diff [--from 14d] [--to 7d] [options]
 
 Output
   (default)              terminal summary: waste first, then spend
@@ -33,6 +36,11 @@ Filters
   -p, --project <text>   only projects whose name/path contains <text>
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
                          ${'${SOURCES}'}
+
+Compare two time ranges
+  diff                   compare [--from, --to) with [--to, --until or now] (default: the last 7 days vs the 7 before)
+  --from <when> / --to <when>
+  --compare              with --since: compare that range with the one of equal length just before it
 
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable), e.g. --path gemini-cli=~/backup/gemini
@@ -60,7 +68,8 @@ function normalizeArgv(argv: string[]): string[] {
 }
 
 async function main(rawArgv: string[]): Promise<number> {
-  const argv = normalizeArgv(rawArgv);
+  const diffCmd = rawArgv[0] === 'diff';
+  const argv = normalizeArgv(diffCmd ? rawArgv.slice(1) : rawArgv);
   const { values } = parseArgs({
     args: argv,
     allowPositionals: false,
@@ -70,6 +79,9 @@ async function main(rawArgv: string[]): Promise<number> {
       open: { type: 'boolean' },
       since: { type: 'string' },
       until: { type: 'string' },
+      from: { type: 'string' },
+      to: { type: 'string' },
+      compare: { type: 'boolean' },
       project: { type: 'string', short: 'p' },
       source: { type: 'string' },
       dir: { type: 'string' },
@@ -94,8 +106,21 @@ async function main(rawArgv: string[]): Promise<number> {
     return 0;
   }
 
-  const since = parseWhen(values.since);
   const until = parseWhen(values.until);
+  let since = parseWhen(values.since);
+  // diff / --compare: two ranges, loaded once and split later
+  let ranges: ReturnType<typeof resolveRanges> | undefined;
+  if (diffCmd) {
+    if (values.since) throw new Error('diff takes --from / --to (and optionally --until), not --since');
+    ranges = resolveRanges({ from: parseWhen(values.from), to: parseWhen(values.to), until });
+  } else if (values.compare) {
+    if (since === undefined) throw new Error('--compare needs --since (e.g. --since 7d --compare)');
+    ranges = resolveRanges({ to: since, until });
+  } else if (values.from || values.to) throw new Error('--from / --to are for `tokenscope diff`; use --since / --until otherwise');
+  if (ranges) {
+    if (values.html !== undefined) throw new Error('diff has terminal and --json output only');
+    since = ranges.before.start;
+  }
 
   const overrides = new Map<SourceId, string[]>();
   const addPath = (id: string, dir: string) => {
@@ -176,19 +201,33 @@ async function main(rawArgv: string[]): Promise<number> {
     const q = values.project.toLowerCase();
     sessions = sessions.filter((s) => s.project.toLowerCase().includes(q) || (s.projectPath ?? '').toLowerCase().includes(q));
   }
-  sessions = filterByTime(sessions, since, until);
+  if (!ranges) sessions = filterByTime(sessions, since, until);
   if (!sessions.length) {
     process.stderr.write(`No sessions matched in ${scanned.join(', ')}.\n`);
     return 1;
   }
 
   const pricer = new Pricer(loadPricing(values.pricing));
-  const report = buildReport(sessions, pricer, {
+  const buildOpts = {
     redact: values.redact,
     version: VERSION,
     sourceInfo: Object.fromEntries(parsers.map((p) => [p.id, { name: p.name, verified: p.verified }])),
     waste: values.huge ? { hugeOutputTokens: Number(values.huge) } : undefined,
-  });
+  };
+  if (ranges) {
+    const d = diffRanges(sessions, ranges, pricer, buildOpts);
+    if (values.json !== undefined) {
+      const json = JSON.stringify(d, null, 2);
+      if (values.json) {
+        writeFileSync(values.json, json);
+        process.stderr.write(`JSON diff written to ${values.json}\n`);
+      } else process.stdout.write(json + '\n');
+      return 0;
+    }
+    process.stdout.write(renderDiffTerminal(d, { color: useColor(values['no-color']), width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
+    return 0;
+  }
+  const report = buildReport(sessions, pricer, buildOpts);
   const elapsed = Date.now() - t0;
 
   const jsonFlag = values.json !== undefined;
@@ -212,12 +251,15 @@ async function main(rawArgv: string[]): Promise<number> {
     if (jsonFlag) return 0;
   }
   if (!jsonFlag) {
-    const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
-    const color = !values['no-color'] && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
-    process.stdout.write(renderTerminal(report, { color, width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
+    process.stdout.write(renderTerminal(report, { color: useColor(values['no-color']), width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
   }
   return 0;
+}
+
+function useColor(noColor?: boolean): boolean {
+  const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
+  return !noColor && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
 }
 
 function openFile(file: string): void {
