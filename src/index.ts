@@ -8,3 +8,5 @@ export { detectWaste, defaultWasteOptions } from './analyze/waste.js';
 export type { Finding, WasteOptions } from './analyze/waste.js';
 export { renderTerminal } from './render/terminal.js';
 export { renderHtml } from './render/html.js';
+export { Watcher, runWatch } from './watch.js';
+export type { WatchAlert, WatcherOptions } from './watch.js';

@@ -124,6 +124,7 @@ VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf
 
 ```text
 tokenscope [options]
+tokenscope watch [options]   live alerts for the active Claude Code session (see below)
 
 Output
   (default)              terminal summary: waste first, then spend
@@ -162,6 +163,23 @@ npx @mintwork/tokenscope --redact --html share.html         # safe to post in Sl
 
 Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`).
 
+### Live alerts: `tokenscope watch`
+
+```bash
+npx @mintwork/tokenscope watch                    # the newest Claude Code session; follows you to new ones
+npx @mintwork/tokenscope watch --session 3f2a     # pin one session (id or prefix)
+npx @mintwork/tokenscope watch -p checkout        # newest session in a matching project
+```
+
+```text
+14:02:11 cache expires in ~1 min: ~180k tokens are cached; replying after that re-writes them (~$0.90)
+14:03:12 cache likely expired (5-minute TTL, idle 5 min): the next message re-writes ~180k tokens (~$0.90) instead of reading them from cache
+14:09:40 Bash called 3× in a row, same input & same result - ≈$0.42
+  ↳ Interrupt as soon as the same result comes back twice, ...
+```
+
+It polls the session log every 2 seconds (`--interval <seconds>`; no dependencies, no network), re-reads it when it changes, and prints each alert once: a heads-up about a minute before the prompt cache expires (5 minutes, or 1 hour when the session writes 1h cache), an alert when it has expired (the tokens the next message re-writes, priced as cache write minus cache read for that model), and every new waste finding with its fix. Findings already in the session when you start are summarized in one line. Ctrl-C exits. Claude Code only for now.
+
 ## How costs are computed
 
 For each API request: `input × in + output × out + cache_read × read + cache_write_5m × 1.25·in + cache_write_1h × 2·in`, using the rates in [`src/pricing/pricing.json`](src/pricing/pricing.json) (Anthropic, OpenAI, Google and Qwen models, each provider with its source URL and date). It handles each agent's token semantics: OpenAI-style input includes cached tokens, Gemini output excludes thoughts, Roo's `tokensIn` includes cache. Model ids are normalized (Bedrock/Vertex prefixes, `-v1:0`, dates, `[1m]`, Copilot's `claude-sonnet-4.5`) and matched exactly or by longest prefix.
@@ -184,7 +202,7 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
 - [ ] More agents: Cursor, Aider, Goose, Antigravity, pi-agent, Kimi
-- [ ] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
+- [x] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
 - [ ] CI mode for headless agent runs (`--fail-over 20` dollars of waste)
 - [ ] More detectors: context bloat before compaction, unused tool definitions, over-thinking on trivial turns, failed-edit retry storms
 - [ ] Diff two time ranges ("what got more wasteful this week?")

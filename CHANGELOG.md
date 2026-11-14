@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `tokenscope watch`: tails the active Claude Code session and prints live alerts, each once: a heads-up about a
+  minute before the prompt cache expires, an alert when it has (tokens the next message re-writes and the extra cost
+  over a warm cache; 5-minute or 1-hour TTL), and each new waste finding with its fix. Follows you to newer sessions
+  unless pinned with `--session`; `-p`, `--dir`, `--interval`; Ctrl-C exits cleanly. Polling only, no dependencies.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed
