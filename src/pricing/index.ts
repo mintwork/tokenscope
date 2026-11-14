@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 // pricing.json sits next to this module in both src/ and dist/ (copied at build time)
 const builtin: unknown = JSON.parse(readFileSync(new URL('./pricing.json', import.meta.url), 'utf8'));
 import type { ApiCall, Usage } from '../types.js';
+import { readCachedFeed } from './feed.js';
 
 export interface Rate {
   input: number;
@@ -19,6 +20,8 @@ export interface PricingTable {
   sources?: Record<string, string>;
   defaults: { cacheReadMultiplier: number; cacheWrite5mMultiplier: number; cacheWrite1hMultiplier: number; fastMultiplier: number };
   models: Record<string, Rate>;
+  /** Which base table is in use: the one shipped with this version, or a newer cached `--update-pricing` feed. */
+  source?: 'builtin' | 'feed';
 }
 
 export interface ResolvedRate {
@@ -30,12 +33,25 @@ export interface ResolvedRate {
   cacheWrite1h: number;
 }
 
-export function loadPricing(file?: string): PricingTable {
-  const base = builtin as unknown as PricingTable;
+export interface LoadPricingOptions {
+  /** Prefer the cached `--update-pricing` feed when it is newer than the built-in table (default false). */
+  useFeed?: boolean;
+  /** Cached feed file (defaults to the per-user cache location). */
+  feedFile?: string;
+}
+
+/** The built-in table, or the cached feed when enabled and newer; `file` overrides are merged on top. Never fetches. */
+export function loadPricing(file?: string, opts: LoadPricingOptions = {}): PricingTable {
+  let base: PricingTable = { ...(builtin as unknown as PricingTable), source: 'builtin' };
+  if (opts.useFeed) {
+    const feed = readCachedFeed(opts.feedFile);
+    if (feed && (feed.updated ?? '') > (base.updated ?? '')) base = { ...feed, source: 'feed' };
+  }
   if (!file) return base;
   const custom = JSON.parse(readFileSync(file, 'utf8')) as Partial<PricingTable>;
   return {
     updated: custom.updated ?? base.updated,
+    source: base.source,
     defaults: { ...base.defaults, ...(custom.defaults ?? {}) },
     models: { ...base.models, ...(custom.models ?? {}) },
   };

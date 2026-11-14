@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { buildReport, filterByTime } from './analyze/report.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
+import { updatePricing } from './pricing/feed.js';
 import { renderHtml } from './render/html.js';
 import { renderTerminal } from './render/terminal.js';
 import type { Session, SourceId } from './types.js';
@@ -42,6 +43,9 @@ Sources
 
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
+  --update-pricing       download the latest published pricing table and cache it locally
+                         (the only network request tokenscope makes; never done by default)
+  --no-pricing-cache     ignore the cached table from --update-pricing, use the built-in one
   --huge <tokens>        tool output size flagged as huge (default 10000)
   --top <n>              rows per section in the terminal (default 8)
   --redact               replace prompts, titles, paths and commands with placeholders
@@ -77,6 +81,8 @@ async function main(rawArgv: string[]): Promise<number> {
       'list-sources': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       pricing: { type: 'string' },
+      'update-pricing': { type: 'boolean' },
+      'no-pricing-cache': { type: 'boolean' },
       huge: { type: 'string' },
       top: { type: 'string' },
       redact: { type: 'boolean' },
@@ -92,6 +98,14 @@ async function main(rawArgv: string[]): Promise<number> {
   if (values.version) {
     process.stdout.write(VERSION + '\n');
     return 0;
+  }
+
+  if (values['update-pricing']) {
+    // opt-in network access: fetch, validate and cache the published pricing table
+    const r = await updatePricing();
+    process.stderr.write(`tokenscope: pricing table updated ${r.table.updated} (${r.models} models) from ${r.url}\n           cached at ${r.file}\n`);
+    // `tokenscope --update-pricing` on its own just updates
+    if (rawArgv.every((a) => a === '--update-pricing' || a === '--no-color')) return 0;
   }
 
   const since = parseWhen(values.since);
@@ -182,7 +196,7 @@ async function main(rawArgv: string[]): Promise<number> {
     return 1;
   }
 
-  const pricer = new Pricer(loadPricing(values.pricing));
+  const pricer = new Pricer(loadPricing(values.pricing, { useFeed: !values['no-pricing-cache'] }));
   const report = buildReport(sessions, pricer, {
     redact: values.redact,
     version: VERSION,

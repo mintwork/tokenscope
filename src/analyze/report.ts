@@ -97,6 +97,8 @@ export interface Report {
   /** Per-agent data capabilities and which waste detectors could run. */
   coverage: SourceCoverage[];
   pricingUpdated?: string;
+  /** 'builtin' = the table shipped with this version; 'feed' = a newer table cached by `--update-pricing`. */
+  pricingSource?: 'builtin' | 'feed';
   unknownModels: string[];
   /** Models priced from the agent's recorded cost because they're not in the pricing table. */
   reportedModels: string[];
@@ -442,6 +444,7 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
         return { ...c, caps, detectors };
       }),
     pricingUpdated: pricer.table.updated,
+    pricingSource: pricer.table.source ?? 'builtin',
     unknownModels: [...pricer.unknownModels],
     reportedModels: [...pricer.reportedModels],
     totals: {

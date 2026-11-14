@@ -218,6 +218,10 @@ export function renderTerminal(r: Report, o: TermOptions): string {
     line();
     line(p.yellow(`⚠ No pricing for: ${r.unknownModels.join(', ')} - their spend is NOT included (counted as $0). Add them to pricing.json or pass --pricing.`));
   }
+  if (r.pricingSource === 'feed') {
+    line();
+    line(p.dim(`ℹ Prices from the published table of ${r.pricingUpdated} (cached by --update-pricing; --no-pricing-cache to use the built-in one)`));
+  }
   line();
   line(p.dim(`→ ${p.bold('tokenscope --html')} for the interactive flame graph · ${p.bold('--json')} for raw data · ${p.bold('--help')} for filters`));
   line();

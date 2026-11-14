@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `--update-pricing`: opt-in download of the pricing table published on `main`, strictly validated and cached in
+  the user cache dir; later runs use it only when it is newer than the built-in table (`--no-pricing-cache` to
+  ignore it). The report says which table priced it (`pricingSource` in JSON). This is the only network access
+  tokenscope makes, and it never happens by default.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed
