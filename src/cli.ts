@@ -9,20 +9,20 @@ import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
 import { renderTerminal } from './render/terminal.js';
-import type { Session } from './types.js';
-import { exists, parseWhen } from './util.js';
+import type { Session, SourceId } from './types.js';
+import { exists, expandHome, parseWhen } from './util.js';
 
 const require = createRequire(import.meta.url);
 const VERSION: string = require('../package.json').version;
 
 const HELP = `
-tokenscope ${VERSION} - where did my AI coding agent's tokens (and money) go?
+tokenscope ${VERSION} - find the tokens (and money) your AI coding agent wasted
 
 Usage
   npx tokenscope [options]
 
 Output
-  (default)              pretty terminal summary
+  (default)              terminal summary: waste first, then spend
   --html [file]          self-contained HTML report with flame graph (default: tokenscope-report.html)
   --json [file]          machine-readable report (stdout when no file given)
   --open                 open the HTML report when done
@@ -31,11 +31,14 @@ Filters
   --since <when>         7d, 24h, 2w, or a date (2026-11-01)
   --until <when>         same formats
   -p, --project <text>   only projects whose name/path contains <text>
-  --source <id>          claude-code | codex | all (default: all that exist)
+  --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
+                         ${'${SOURCES}'}
 
 Sources
-  --dir <path>           Claude Code projects dir (default: ~/.claude/projects, honors CLAUDE_CONFIG_DIR)
-  --codex-dir <path>     Codex sessions dir (default: ~/.codex/sessions, honors CODEX_HOME)
+  --path <id>=<dir>      read agent <id> from <dir> (repeatable), e.g. --path gemini-cli=~/backup/gemini
+  --dir <dir>            shorthand for --path claude-code=<dir>
+  --codex-dir <dir>      shorthand for --path codex=<dir>
+  --list-sources         show every supported agent, where it looks, and what it found
 
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
@@ -44,7 +47,7 @@ Tuning
   --redact               replace prompts, titles, paths and commands with placeholders
   --no-color             disable ANSI colors (also honors NO_COLOR)
   -h, --help / -v, --version
-`;
+`.replace('${SOURCES}', parsers.map((p) => p.id).join(', '));
 
 /** Allow `--html` / `--json` without a value by injecting an empty one. */
 function normalizeArgv(argv: string[]): string[] {
@@ -68,8 +71,10 @@ async function main(rawArgv: string[]): Promise<number> {
       since: { type: 'string' },
       until: { type: 'string' },
       project: { type: 'string', short: 'p' },
-      source: { type: 'string', default: 'all' },
+      source: { type: 'string' },
       dir: { type: 'string' },
+      path: { type: 'string', multiple: true },
+      'list-sources': { type: 'boolean' },
       'codex-dir': { type: 'string' },
       pricing: { type: 'string' },
       huge: { type: 'string' },
@@ -91,25 +96,79 @@ async function main(rawArgv: string[]): Promise<number> {
 
   const since = parseWhen(values.since);
   const until = parseWhen(values.until);
-  const dirs: Record<string, string | undefined> = { 'claude-code': values.dir, codex: values['codex-dir'] };
-  const wanted = values.source === 'all' ? parsers : parsers.filter((p) => p.id === values.source);
-  if (!wanted.length) throw new Error(`Unknown --source "${values.source}" (use claude-code, codex or all)`);
+
+  const overrides = new Map<SourceId, string[]>();
+  const addPath = (id: string, dir: string) => {
+    if (!parsers.some((p) => p.id === id)) throw new Error(`Unknown agent "${id}" in --path (known: ${parsers.map((p) => p.id).join(', ')})`);
+    const list = overrides.get(id as SourceId) ?? [];
+    list.push(expandHome(dir));
+    overrides.set(id as SourceId, list);
+  };
+  for (const spec of values.path ?? []) {
+    const eq = spec.indexOf('=');
+    if (eq < 1) throw new Error(`--path expects <agent>=<dir>, got "${spec}"`);
+    addPath(spec.slice(0, eq), spec.slice(eq + 1));
+  }
+  if (values.dir) addPath('claude-code', values.dir);
+  if (values['codex-dir']) addPath('codex', values['codex-dir']);
+
+  let wanted = parsers;
+  if (values.source && values.source !== 'all') {
+    const ids = values.source.split(',').map((x) => x.trim()).filter(Boolean);
+    const bad = ids.filter((id) => !parsers.some((p) => p.id === id));
+    if (bad.length) throw new Error(`Unknown --source ${bad.join(', ')} (known: ${parsers.map((p) => p.id).join(', ')})`);
+    wanted = parsers.filter((p) => ids.includes(p.id));
+  } else if (overrides.size && !values.source) {
+    // explicit paths given without --source: only read those agents
+    wanted = parsers.filter((p) => overrides.has(p.id));
+  }
+
+  if (values['list-sources']) {
+    for (const p of parsers) {
+      const dirs = overrides.get(p.id) ?? p.defaultDirs();
+      const found: string[] = [];
+      for (const d of dirs) if (await exists(d)) found.push(d);
+      process.stdout.write(
+        `${found.length ? '●' : '○'} ${p.id.padEnd(12)} ${p.name.padEnd(16)} ${p.verified ? 'verified on real logs' : 'experimental (format from docs/source)'}\n` +
+          (found.length
+            ? found.map((d) => `     found    ${d}`).join('\n') + '\n'
+            : `     not found (checked ${dirs.length} location${dirs.length > 1 ? 's' : ''}, e.g. ${dirs[0]})\n`),
+      );
+    }
+    return 0;
+  }
 
   const t0 = Date.now();
   let sessions: Session[] = [];
   const scanned: string[] = [];
+  const notes: string[] = [];
   for (const p of wanted) {
-    const dir = dirs[p.id] ?? p.defaultDir();
-    if (!(await exists(dir))) {
-      if (dirs[p.id]) throw new Error(`${p.name} directory not found: ${dir}`);
-      continue;
+    const explicit = overrides.get(p.id);
+    for (const dir of explicit ?? p.defaultDirs()) {
+      if (!(await exists(dir))) {
+        if (explicit) throw new Error(`${p.name} directory not found: ${dir}`);
+        continue;
+      }
+      scanned.push(`${p.name} (${dir})`);
+      try {
+        sessions.push(...(await p.load(dir, { since, notes })));
+      } catch (err) {
+        notes.push(`${p.name}: could not read ${dir}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-    scanned.push(`${p.name} (${dir})`);
-    sessions.push(...(await p.load(dir, { since })));
   }
+  for (const n of notes) process.stderr.write(`tokenscope: ${n}\n`);
+  // the same session can be reachable from two candidate dirs
+  const seen = new Set<string>();
+  sessions = sessions.filter((s) => {
+    const k = s.source + '\0' + s.id;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   if (!scanned.length) {
     process.stderr.write(
-      `No agent logs found. Looked for Claude Code in ${parsers[0].defaultDir()} and Codex in ${parsers[1].defaultDir()}.\nUse --dir / --codex-dir to point at a different location.\n`,
+      `No agent logs found. Supported: ${parsers.map((p) => p.name).join(', ')}.\nRun \`tokenscope --list-sources\` to see where each agent is looked for, and --path <agent>=<dir> to point somewhere else.\n`,
     );
     return 1;
   }
@@ -127,6 +186,7 @@ async function main(rawArgv: string[]): Promise<number> {
   const report = buildReport(sessions, pricer, {
     redact: values.redact,
     version: VERSION,
+    sourceInfo: Object.fromEntries(parsers.map((p) => [p.id, { name: p.name, verified: p.verified }])),
     waste: values.huge ? { hugeOutputTokens: Number(values.huge) } : undefined,
   });
   const elapsed = Date.now() - t0;
@@ -164,6 +224,12 @@ function openFile(file: string): void {
   const args = process.platform === 'win32' ? ['/c', 'start', '', file] : [file];
   spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
 }
+
+// `tokenscope | head` closes the pipe early - that's fine
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
 
 // set exitCode instead of calling process.exit() so piped stdout is fully flushed
 main(process.argv.slice(2)).then(
