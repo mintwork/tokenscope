@@ -65,17 +65,29 @@ const MEMORY_FILE: Partial<Record<SourceId, string>> = {
 };
 const memFile = (s: SourceId) => MEMORY_FILE[s] ?? 'AGENTS.md';
 
-export type CacheCause = 'idle' | 'model' | 'prefix';
+/**
+ * Why a prompt cache was rebuilt:
+ *  - pause:     the cache expired while you read / thought (gap 5-60 min after the agent's reply)
+ *  - tool-wait: the cache expired while the agent waited on a long tool call
+ *  - prefix:    no idle gap - the prompt prefix changed (instructions edited, tools toggled, compaction)
+ *  - model:     a model switch (caches are per model)
+ * Gaps longer than an hour are beyond any cache TTL and are reported as unavoidable, not waste.
+ */
+export type CacheCause = 'pause' | 'tool-wait' | 'model' | 'prefix';
 
 /** One-line "how to avoid this" for each finding type. */
 export function tipFor(kind: FindingKind, source: SourceId, cause?: CacheCause): string {
   const mem = memFile(source);
   switch (kind) {
     case 'cache-miss':
-      if (cause === 'idle')
+      if (cause === 'pause')
         return source === 'claude-code'
-          ? 'After a break longer than 5 min, /clear or start a fresh session instead of resuming a huge context, or use a 1-hour cache TTL if you often pause mid-task.'
-          : 'After a break longer than the cache TTL, start a fresh session (or compact first) instead of resuming a huge context.';
+          ? 'Use the 1-hour cache TTL for long interactive sessions: "promptCacheTtl": "1h" in ~/.claude/settings.json (or ENABLE_PROMPT_CACHING_1H=1). Don\'t /clear - you would lose the context and pay to rebuild it anyway.'
+          : 'Use a 1-hour prompt-cache TTL if your agent/provider supports it. Don\'t clear the session - rebuilding the context costs about the same.';
+      if (cause === 'tool-wait')
+        return source === 'claude-code'
+          ? 'Have long commands run in the background (ask Claude to use run_in_background; manage them with /tasks) so the conversation keeps the cache warm, or set "promptCacheTtl": "1h".'
+          : 'Run long commands in the background so the agent keeps working while they finish, or use a 1-hour prompt-cache TTL if supported.';
       if (cause === 'model') return 'Stick to one model per session - switching models throws the prompt cache away.';
       return `Avoid changing the prompt prefix mid-session (editing ${mem}, toggling MCP servers/tools, switching modes); compaction also forces one rebuild.`;
     case 'loop':
@@ -159,10 +171,22 @@ function severityFor(cost: number, floor: Severity = 'low'): Severity {
   return rank[s] >= rank[floor] ? s : floor;
 }
 
+const usd = (n: number) => (n < 0.01 ? '<$0.01' : '$' + n.toFixed(2));
 const fmtTok = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n));
 const short = (p: string, n = 60) => (p.length > n ? '…' + p.slice(-(n - 1)) : p);
 
-export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<WasteOptions> = {}): Finding[] {
+/** Side statistics that are informative but are NOT waste. */
+export interface WasteStats {
+  /** Cache rebuilds after gaps longer than any cache TTL (or on providers without a TTL setting). */
+  unavoidableRebuilds: number;
+  unavoidableTokens: number;
+  /** What those rebuilds cost above cache-read price - shown for context only. */
+  unavoidableCost: number;
+  /** Net effect of a 1h TTL on every main conversation (positive = saving), incl. sessions that only pay the premium. */
+  ttlGlobalNet: number;
+}
+
+export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<WasteOptions> = {}, stats?: WasteStats): Finding[] {
   const o = { ...defaultWasteOptions, ...opts };
   const findings: Finding[] = [];
 
@@ -310,14 +334,20 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
         }
       }
 
-      // --- cache misses ------------------------------------------------------
+      // --- cache rebuilds ----------------------------------------------------
       // only meaningful where caching demonstrably works for this model/provider
       if (can('cache-miss') && ctx.calls.some((c) => c.usage.cacheRead > 0)) {
-        const groups: Record<CacheCause, { n: number; tokens: number; cost: number; worstGap: number }> = {
-          idle: { n: 0, tokens: 0, cost: 0, worstGap: 0 },
-          model: { n: 0, tokens: 0, cost: 0, worstGap: 0 },
-          prefix: { n: 0, tokens: 0, cost: 0, worstGap: 0 },
-        };
+        const firstOfTurn = new Set(ctx.session.turns.map((t) => t.calls[0]).filter(Boolean));
+        interface Rebuild {
+          call: ApiCall;
+          rebuilt: number;
+          carried: number;
+          gapMin: number;
+          cause: CacheCause | 'unavoidable';
+          tool?: ToolCall;
+          toolMin?: number;
+        }
+        const rebuilds = new Map<ApiCall, Rebuild>();
         for (let i = 1; i < ctx.calls.length; i++) {
           const prev = ctx.calls[i - 1];
           const cur = ctx.calls[i];
@@ -326,43 +356,135 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
           // cached input, so a miss shows up as a large uncached `input`.
           const rebuilt = caps.cacheWrites ? cur.usage.cacheWrite5m + cur.usage.cacheWrite1h : cur.usage.input;
           if (rebuilt < o.cacheMissMinTokens || rebuilt < prevCtx * 0.5) continue;
-          const r = pricer.rates(cur.model, rebuilt + cur.usage.cacheRead);
-          let extra = 0;
-          if (r) {
-            const paid = caps.cacheWrites ? (cur.usage.cacheWrite1h > cur.usage.cacheWrite5m ? r.cacheWrite1h : r.cacheWrite5m) : r.input;
-            extra = (rebuilt * Math.max(0, paid - r.cacheRead)) / 1e6;
-          }
           const gapMin = (cur.timestamp - prev.timestamp) / 60000;
           const ttlMin = cur.usage.cacheWrite1h > cur.usage.cacheWrite5m ? 60 : 5;
-          const cause: CacheCause = gapMin > ttlMin ? 'idle' : prev.model !== cur.model ? 'model' : 'prefix';
-          const g = groups[cause];
-          g.n++;
-          g.tokens += rebuilt;
-          g.cost += extra;
-          g.worstGap = Math.max(g.worstGap, gapMin);
+          const rb: Rebuild = { call: cur, rebuilt, carried: Math.min(rebuilt, prevCtx), gapMin, cause: 'prefix' };
+          if (gapMin <= ttlMin) rb.cause = prev.model !== cur.model ? 'model' : 'prefix';
+          else if (gapMin > 60 || ttlMin >= 60 || !caps.cacheWrites) {
+            // beyond any cache TTL (or a provider with no TTL knob): unavoidable, not waste
+            rb.cause = 'unavoidable';
+          } else if (firstOfTurn.has(cur)) rb.cause = 'pause';
+          else {
+            rb.cause = 'tool-wait';
+            let best = 0;
+            for (const tc of prev.toolCalls) {
+              const dur = tc.resultAt ? (tc.resultAt - prev.timestamp) / 60000 : gapMin;
+              if (!rb.tool || dur > best) {
+                rb.tool = tc;
+                best = dur;
+              }
+            }
+            rb.toolMin = best;
+          }
+          rebuilds.set(cur, rb);
         }
-        const verb = caps.cacheWrites ? 're-written' : 're-sent uncached';
-        for (const cause of ['idle', 'prefix', 'model'] as CacheCause[]) {
-          const g = groups[cause];
-          if (!g.n || g.cost < 0.01) continue;
-          const why =
-            cause === 'idle'
-              ? `after idle gaps longer than the cache TTL (longest ${Math.round(g.worstGap)} min)`
-              : cause === 'model'
-                ? 'right after a model switch'
-                : 'with no idle gap - the prompt prefix changed (edited instructions, tool list, compaction or history rewrite)';
+        const rates = (c: ApiCall) => pricer.rates(c.model, c.usage.input + c.usage.cacheRead + c.usage.cacheWrite5m + c.usage.cacheWrite1h, c.fast);
+
+        // (1) prefix changes / model switches: rebuilt at write price instead of read price
+        for (const cause of ['prefix', 'model'] as CacheCause[]) {
+          const list = [...rebuilds.values()].filter((r) => r.cause === cause);
+          let cost = 0;
+          let tokens = 0;
+          for (const r of list) {
+            const rt = rates(r.call);
+            if (!rt) continue;
+            const paid = caps.cacheWrites ? (r.call.usage.cacheWrite1h > r.call.usage.cacheWrite5m ? rt.cacheWrite1h : rt.cacheWrite5m) : rt.input;
+            cost += (r.carried * Math.max(0, paid - rt.cacheRead)) / 1e6;
+            tokens += r.rebuilt;
+          }
+          if (!list.length || cost < 0.01) continue;
           push({
             kind: 'cache-miss',
             certainty: 'likely-avoidable',
             cause,
-            severity: severityFor(g.cost),
-            title: `${g.n} prompt-cache rebuild${g.n > 1 ? 's' : ''} ${cause === 'idle' ? 'after breaks' : cause === 'model' ? 'after model switches' : 'mid-session'} (${fmtTok(g.tokens)} tokens ${verb})${where}`,
-            detail: `The whole context was paid for at ${caps.cacheWrites ? 'cache-write' : 'full input'} price instead of cache-read price, ${why}.`,
-            count: g.n,
-            tokens: g.tokens,
-            cost: g.cost,
+            severity: severityFor(cost),
+            title: `${list.length} prompt-cache rebuild${list.length > 1 ? 's' : ''} ${cause === 'model' ? 'after model switches' : 'mid-session, with no idle gap'} (${fmtTok(tokens)} tokens)${where}`,
+            detail:
+              cause === 'model'
+                ? 'Caches are per model, so the context was re-written right after switching models.'
+                : 'The prompt prefix changed (edited instructions, tool list, compaction or history rewrite), so the cached context could not be reused.',
+            count: list.length,
+            tokens,
+            cost,
           });
         }
+
+        // (2) gaps of 5-60 min: counterfactual = this whole context on a 1-hour TTL.
+        //     Those rebuilds become cache reads, but every cache write pays the 1h premium (2x vs 1.25x).
+        const ttl = [...rebuilds.values()].filter((r) => r.cause === 'pause' || r.cause === 'tool-wait');
+        if (caps.cacheWrites) {
+          let actual = 0;
+          let counter = 0;
+          const gross = new Map<Rebuild, number>();
+          for (const c of ctx.calls) {
+            const rt = rates(c);
+            if (!rt) continue;
+            const u = c.usage;
+            const a = (u.cacheWrite5m * rt.cacheWrite5m + u.cacheWrite1h * rt.cacheWrite1h + u.cacheRead * rt.cacheRead) / 1e6;
+            const r = rebuilds.get(c);
+            const writes = u.cacheWrite5m + u.cacheWrite1h;
+            const b =
+              r && (r.cause === 'pause' || r.cause === 'tool-wait')
+                ? ((u.cacheRead + r.carried) * rt.cacheRead + (writes - r.carried) * rt.cacheWrite1h) / 1e6
+                : (u.cacheRead * rt.cacheRead + writes * rt.cacheWrite1h) / 1e6;
+            actual += a;
+            counter += b;
+            if (r && (r.cause === 'pause' || r.cause === 'tool-wait')) gross.set(r, a - b);
+          }
+          const net = actual - counter;
+          // what a global 1h setting would do to this context, even if it has nothing to gain
+          if (stats && !ctx.session.isSubagent) stats.ttlGlobalNet += net;
+          const grossSum = [...gross.values()].reduce((x, y) => x + y, 0);
+          if (net > 0.01 && grossSum > 0) {
+            const premium = grossSum - net;
+            for (const cause of ['pause', 'tool-wait'] as CacheCause[]) {
+              const list = ttl.filter((r) => r.cause === cause);
+              if (!list.length) continue;
+              const g = list.reduce((x, r) => x + (gross.get(r) ?? 0), 0);
+              const cost = (g / grossSum) * net;
+              if (cost < 0.01) continue;
+              const tokens = list.reduce((x, r) => x + r.carried, 0);
+              const gaps = list.map((r) => r.gapMin).sort((a, b) => a - b);
+              const median = Math.round(gaps[Math.floor(gaps.length / 2)]);
+              let detail: string;
+              if (cause === 'pause') {
+                detail = `You took 5-60 min to read and reply ${list.length}× (median ${median} min), longer than the 5-minute cache TTL, so the context was re-written each time. With a 1-hour TTL these would have been cache reads: net saving ≈ ${usd(cost)} after paying the 1h write premium on every cache write in this context${premium > 0.01 ? ` (${usd(premium)} total premium)` : ''}.`;
+              } else {
+                const byTool = new Map<string, { n: number; min: number }>();
+                for (const r of list) {
+                  const label = r.tool ? `${r.tool.name}(${r.tool.target ?? '…'})` : 'a tool';
+                  const e = byTool.get(label) ?? { n: 0, min: 0 };
+                  e.n++;
+                  e.min = Math.max(e.min, r.toolMin ?? r.gapMin);
+                  byTool.set(label, e);
+                }
+                const top = [...byTool.entries()].sort((a, b) => b[1].min - a[1].min).slice(0, 3);
+                detail = `The cache expired ${list.length}× while the agent waited 5-60 min on a tool (or on your approval): ${top.map(([l, e]) => `${l} ${Math.round(e.min)} min${e.n > 1 ? ` ×${e.n}` : ''}`).join(', ')}. Net saving with a 1-hour TTL ≈ ${usd(cost)} after the 1h write premium.`;
+              }
+              push({
+                kind: 'cache-miss',
+                certainty: 'avoidable',
+                cause,
+                severity: severityFor(cost),
+                title: `${list.length} cache rebuild${list.length > 1 ? 's' : ''} ${cause === 'pause' ? 'while you were reading/replying' : 'while the agent waited on tools'} (${fmtTok(tokens)} tokens)${where}`,
+                detail,
+                count: list.length,
+                tokens,
+                cost,
+              });
+            }
+          }
+        }
+
+        // (3) gaps over an hour: unavoidable - recorded for context, never counted as waste
+        if (stats)
+          for (const r of rebuilds.values())
+            if (r.cause === 'unavoidable') {
+              const rt = rates(r.call);
+              stats.unavoidableRebuilds++;
+              stats.unavoidableTokens += r.rebuilt;
+              if (rt) stats.unavoidableCost += (r.carried * Math.max(0, (caps.cacheWrites ? rt.cacheWrite5m : rt.input) - rt.cacheRead)) / 1e6;
+            }
       }
     }
   }

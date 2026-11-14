@@ -85,14 +85,15 @@ describe('buildReport', async () => {
       const [h] = kinds('huge-output');
       expect(h).toMatchObject({ sessionId: 'sess-beta', tokens: 20000 });
     });
-    it('detects cache rebuilds after idle gaps', () => {
+    it('detects a cache rebuild after the user paused ~28 min, valued at the 1h-TTL net saving', () => {
       const [m] = kinds('cache-miss');
-      expect(m).toMatchObject({ sessionId: 'sess-alpha', count: 1, tokens: 25000 });
-      expect(m.detail).toContain('idle');
-      expect(m).toMatchObject({ cause: 'idle', certainty: 'likely-avoidable', source: 'claude-code' });
-      expect(m.tip).toContain('/clear');
-      // Opus 4.5: (6.25 - 0.5) * 25k / 1M
-      expect(m.cost).toBeCloseTo(0.14375, 6);
+      expect(m).toMatchObject({ sessionId: 'sess-alpha', count: 1, tokens: 24005 }); // tokens carried over from the previous request
+      expect(m.detail).toContain('read and reply');
+      expect(m).toMatchObject({ cause: 'pause', certainty: 'avoidable', source: 'claude-code' });
+      expect(m.tip).toContain('promptCacheTtl');
+      // gross saving would be (6.25 - 0.5) * 24k / 1M = $0.138; the 1h write premium on the session's other writes eats most of it
+      expect(m.cost).toBeGreaterThan(0.01);
+      expect(m.cost).toBeLessThan((24005 * (6.25 - 0.5)) / 1e6);
     });
   });
 

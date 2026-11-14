@@ -78,10 +78,10 @@ describe('amp parser (experimental)', async () => {
     expect(c.usage).toMatchObject({ input: 12, output: 95, cacheWrite5m: 8400 });
   });
 
-  it('detects the npm test loop and the cache rebuild after a break', () => {
+  it('detects the npm test loop and the cache rebuild while waiting on a tool', () => {
     const r = buildReport(sessions, new Pricer());
     expect(r.findings.find((f) => f.kind === 'loop')).toMatchObject({ source: 'amp', count: 3 });
-    expect(r.findings.find((f) => f.kind === 'cache-miss')).toMatchObject({ cause: 'idle', certainty: 'likely-avoidable' });
+    expect(r.findings.find((f) => f.kind === 'cache-miss')).toMatchObject({ cause: 'tool-wait', certainty: 'avoidable' });
   });
 });
 

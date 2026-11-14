@@ -13,6 +13,7 @@ import {
   type Finding,
   type FindingKind,
   type WasteOptions,
+  type WasteStats,
 } from './waste.js';
 import type { Capabilities } from '../types.js';
 
@@ -48,7 +49,7 @@ export interface SessionSummary {
   subagentCost: number;
   cacheHitRate: number;
   models: string[];
-  /** Estimated waste (USD); null when no waste detector could run on this session's data. */
+  /** Estimated avoidable waste (USD); null when no waste detector could run on this session's data. */
   waste: number | null;
   /** Detectors that could run on this session. */
   checked: FindingKind[];
@@ -111,12 +112,20 @@ export interface Report {
     cacheHitRate: number;
     /** What the same tokens would have cost with no prompt caching at all. */
     costWithoutCache: number;
-    /** All estimated waste (avoidable + likely avoidable). */
+    /** Everything flagged (avoidable + likely avoidable). Not the headline. */
     wasteCost: number;
-    /** Clear-cut waste: identical calls/results, unchanged re-reads. */
+    /**
+     * The headline: realistic savings only - repeated work (loops, repeats, unchanged re-reads)
+     * and the net saving a 1-hour cache TTL would have given (after its write premium).
+     */
     avoidableCost: number;
-    /** Usually waste, but arguable: cache rebuilds after breaks, huge outputs. */
+    /** Arguable, shown separately: mid-session prompt changes, model switches, huge outputs. */
     likelyAvoidableCost: number;
+    /** Cache rebuilds after gaps longer than any TTL - not waste, shown for context. */
+    unavoidableRebuilds: number;
+    unavoidableRebuildCost: number;
+    /** Net effect of turning the 1h TTL on for every main conversation (premium included). */
+    ttlGlobalNet: number;
     /** Sessions where at least one detector could not run (missing data). */
     partiallyCheckedSessions: number;
     /** Sessions where no detector could run at all. */
@@ -304,7 +313,8 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
   const summaries: SessionSummary[] = [];
   const projectSessions = new Map<string, number>();
 
-  const findings = detectWaste(sessions, pricer, opts.waste);
+  const wstats: WasteStats = { unavoidableRebuilds: 0, unavoidableTokens: 0, unavoidableCost: 0, ttlGlobalNet: 0 };
+  const findings = detectWaste(sessions, pricer, opts.waste, wstats);
   let partially = 0;
   let unchecked = 0;
   type CovAcc = Omit<SourceCoverage, 'caps' | 'detectors'> & { capsList: Capabilities[] };
@@ -318,7 +328,7 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
     return c;
   };
   const wasteBySession = new Map<string, number>();
-  for (const f of findings) wasteBySession.set(f.sessionId, (wasteBySession.get(f.sessionId) ?? 0) + f.cost);
+  for (const f of findings) if (f.certainty === 'avoidable') wasteBySession.set(f.sessionId, (wasteBySession.get(f.sessionId) ?? 0) + f.cost);
 
   for (const s of sessions) {
     const su = emptyUsage();
@@ -448,6 +458,9 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
       wasteCost: findings.reduce((n, f) => n + f.cost, 0),
       avoidableCost: findings.filter((f) => f.certainty === 'avoidable').reduce((n, f) => n + f.cost, 0),
       likelyAvoidableCost: findings.filter((f) => f.certainty === 'likely-avoidable').reduce((n, f) => n + f.cost, 0),
+      unavoidableRebuilds: wstats.unavoidableRebuilds,
+      unavoidableRebuildCost: wstats.unavoidableCost,
+      ttlGlobalNet: wstats.ttlGlobalNet,
       partiallyCheckedSessions: partially,
       uncheckedSessions: unchecked,
     },

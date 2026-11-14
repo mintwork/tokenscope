@@ -132,6 +132,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
             const tc = toolCalls.get(b.tool_use_id);
             if (tc) {
               tc.resultChars = contentChars(b.content);
+              if (ts) tc.resultAt = ts;
               tc.resultHash = contentHash(b.content ?? '');
               tc.isError = b.is_error === true;
             }

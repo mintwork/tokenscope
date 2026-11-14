@@ -76,6 +76,8 @@ export interface ToolCall {
   key: string;
   /** Characters returned by the tool (0 when unknown). */
   resultChars: number;
+  /** Epoch ms when the tool result came back (when the log records it). */
+  resultAt?: number;
   /** Short hash of the tool result, to tell "same call, same answer" from legit re-runs. */
   resultHash?: string;
   isError: boolean;
