@@ -169,3 +169,19 @@ footer a { color: var(--ink-2); }
   .kpi.hero { grid-column: span 2; }
   .grid2 { grid-template-columns: 1fr; }
 }
+
+/* waste overview */
+.wrow { display: grid; grid-template-columns: 210px 1fr 110px; gap: 14px; align-items: center; padding: 8px 0 2px; }
+.wname { font-weight: 600; font-size: 13.5px; }
+.wbar { height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.wbar div { height: 100%; border-radius: 4px; }
+.wrow .num { text-align: right; font-variant-numeric: tabular-nums; }
+.wtip, .tipline { color: var(--ink-2); font-size: 12.5px; padding: 0 0 6px 224px; }
+.tipline { padding: 4px 0 0; color: var(--s-read); }
+:root[data-theme='light'] .tipline { color: #0f7a54; }
+table.cov td, table.cov th { text-align: center; }
+table.cov td:first-child, table.cov th:first-child { text-align: left; }
+.m-yes { color: var(--good); font-weight: 700; }
+.m-partial { color: var(--warning); font-weight: 700; }
+.m-no { color: var(--critical); font-weight: 700; }
+.kpi.hero.warn .value { color: var(--serious); }

@@ -45,20 +45,28 @@
   var T = R.totals;
   var range = dshort(R.range.start) + ' – ' + dshort(R.range.end);
   $('#meta').textContent =
-    R.sources.map(function (s) { return s === 'claude-code' ? 'Claude Code' : s === 'codex' ? 'Codex CLI' : s; }).join(' + ') +
+    R.coverage.map(function (c) { return c.name; }).join(' + ') +
     ' · ' + range + ' · generated ' + new Date(R.generatedAt).toLocaleString();
+  var allUnchecked = T.uncheckedSessions >= T.sessions;
   var kpis = [
-    { cls: 'hero', label: 'Total spend', value: usd(T.cost), sub: tok(T.tokens) + ' tokens · ' + range },
+    allUnchecked
+      ? { cls: 'hero', label: 'Estimated waste', value: 'n/a', sub: 'these logs lack the data waste detectors need' }
+      : {
+          cls: 'hero warn', label: 'Looks wasted (est.)', value: usd(T.wasteCost),
+          sub: (T.cost ? pct(T.wasteCost / T.cost, 0) + ' of ' + usd(T.cost) + ' · ' : '') + usd(T.avoidableCost) + ' avoidable + ' + usd(T.likelyAvoidableCost) + ' likely avoidable',
+        },
+    { label: 'Total spend', value: usd(T.cost), sub: tok(T.tokens) + ' tokens' },
     { label: 'Sessions', value: T.sessions.toLocaleString('en-US'), sub: T.subagents ? '+' + T.subagents + ' subagents' : T.turns + ' turns' },
     { label: 'API calls', value: T.calls.toLocaleString('en-US'), sub: T.toolCalls.toLocaleString('en-US') + ' tool calls' },
-    { label: 'Cache hit rate', value: pct(T.cacheHitRate), sub: 'of prompt tokens' },
-    { label: 'Saved by caching', value: usd(Math.max(0, T.costWithoutCache - T.cost)), sub: 'vs ' + usd(T.costWithoutCache) + ' uncached' },
-    { cls: 'warn', label: 'Est. avoidable', value: usd(T.wasteCost), sub: R.findings.length + ' waste findings' },
+    { label: 'Cache hit rate', value: pct(T.cacheHitRate), sub: 'saved ' + usd(Math.max(0, T.costWithoutCache - T.cost)) + ' vs uncached' },
+    { label: 'Waste findings', value: String(R.findings.length), sub: T.partiallyCheckedSessions ? T.partiallyCheckedSessions + ' sessions only partly checked' : 'all sessions fully checked' },
   ];
   $('#kpis').innerHTML = kpis.map(function (k) {
     return '<div class="kpi ' + (k.cls || '') + '"><div class="label">' + esc(k.label) + '</div><div class="value">' + esc(k.value) +
       '</div><div class="sub">' + esc(k.sub) + '</div></div>';
   }).join('');
+
+  var KIND = { loop: 'Loops', repeat: 'Repeated calls', reread: 'Unchanged re-reads', 'huge-output': 'Huge outputs', 'cache-miss': 'Cache rebuilds' };
 
   /* ---------- tooltip ---------- */
   var tip = $('#tip');
@@ -313,7 +321,7 @@
   }
 
   /* ---------- tables ---------- */
-  var KIND = { loop: 'Loop', repeat: 'Repeat', reread: 'Re-read', 'huge-output': 'Huge output', 'cache-miss': 'Cache miss' };
+
   var wasteFilter = 'all';
   function renderFindings() {
     var counts = {};
@@ -325,8 +333,8 @@
     if (!list.length) { $('#findings').innerHTML = '<div class="empty">No waste detected. Your agent is running lean.</div>'; return; }
     $('#findings').innerHTML = '<table><thead><tr><th>Severity</th><th>Type</th><th>Finding</th><th>Project</th><th class="num">Tokens</th><th class="num">Est. cost</th></tr></thead><tbody>' +
       list.map(function (f) {
-        return '<tr class="click" data-s="' + esc(f.sessionId) + '"><td><span class="chip ' + f.severity + '"><i></i>' + f.severity + '</span></td><td class="kind">' + KIND[f.kind] +
-          '</td><td><div class="t" title="' + esc(f.title) + '">' + esc(f.title) + '</div><div class="d">' + esc(f.detail) + '</div></td><td>' + esc(f.project) +
+        return '<tr class="click" data-s="' + esc(f.sessionId) + '"><td><span class="chip ' + f.severity + '"><i></i>' + f.severity + '</span>' + (f.certainty === 'likely-avoidable' ? '<div class="d">likely</div>' : '') + '</td><td class="kind">' + KIND[f.kind] +
+          '</td><td><div class="t" title="' + esc(f.title) + '">' + esc(f.title) + '</div><div class="d">' + esc(f.detail) + '</div><div class="tipline">↳ ' + esc(f.tip) + '</div></td><td>' + esc(f.project) +
           '</td><td class="num">' + tok(f.tokens) + '</td><td class="num"><b>' + usd(f.cost) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
   }
@@ -367,7 +375,7 @@
       return '<tr class="click" data-s="' + esc(s.id) + '"><td class="num"><b>' + usd(s.cost) + '</b></td><td>' + dshort(s.start) + '</td><td>' + esc(s.project) +
         '</td><td><div class="t" title="' + esc(s.title || s.id) + '">' + esc(s.title || s.id.slice(0, 8)) + '</div><div class="d">' + esc(s.models.join(', ')) + ' · ' + s.turns + ' turns</div></td><td class="num">' +
         s.calls.toLocaleString('en-US') + '</td><td class="num">' + (s.subagents ? s.subagents + ' · ' + usd(s.subagentCost) : '–') + '</td><td class="num">' + pct(s.cacheHitRate, 0) +
-        '</td><td class="num">' + (s.waste ? usd(s.waste) : '–') + '</td></tr>';
+        '</td><td class="num">' + (s.waste === null ? '<span class="d" title="logs lack the data waste checks need">n/a</span>' : s.waste ? usd(s.waste) : '–') + '</td></tr>';
     }).join('') + '</tbody></table>';
   }
   $('#sessions').addEventListener('click', function (e) {
@@ -393,6 +401,41 @@
       }).join('') + '</tbody></table>';
   }
 
+  /* ---------- waste overview ---------- */
+  var KIND_ORDER = ['cache-miss', 'loop', 'repeat', 'reread', 'huge-output'];
+  var KIND_COLOR = { 'cache-miss': '--s-edit', loop: '--s-agent', repeat: '--s-web', reread: '--s-read', 'huge-output': '--s-shell' };
+  function renderWasteOverview() {
+    var by = {};
+    R.findings.forEach(function (f) {
+      var b = by[f.kind] || (by[f.kind] = { n: 0, cost: 0, tips: {}, likely: f.certainty === 'likely-avoidable' });
+      b.n++; b.cost += f.cost;
+      // one tip per cache-rebuild cause, one per other kind (agents differ only in the instructions file name)
+      var key = f.kind === 'cache-miss' ? f.cause : 'k';
+      var cur = b.tips[key];
+      if (!cur || f.cost > cur.cost) b.tips[key] = { tip: f.tip, cost: (cur ? cur.cost : 0) + f.cost };
+      else cur.cost += f.cost;
+    });
+    var max = Math.max.apply(null, KIND_ORDER.map(function (k) { return by[k] ? by[k].cost : 0; }).concat([1e-9]));
+    var rows = KIND_ORDER.map(function (k) {
+      var b = by[k];
+      var cov = R.coverage.map(function (c) { return c.detectors.find(function (d) { return d.kind === k; }); });
+      var none = cov.every(function (d) { return d && d.status === 'no'; });
+      var value = b ? usd(b.cost) : none ? 'not checked' : '$0.00';
+      return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + (b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'logs lack the data' : 'none found') + '</div></div>' +
+        '<div class="wbar"><div style="width:' + (b ? Math.max(1, (b.cost / max) * 100) : 0) + '%;background:var(' + KIND_COLOR[k] + ')"></div></div><div class="num"><b>' + value + '</b></div></div>' +
+        (b ? Object.keys(b.tips).map(function (k) { return b.tips[k]; }).sort(function (x, y) { return y.cost - x.cost; }).slice(0, 2).map(function (t) { return '<div class="wtip">↳ ' + esc(t.tip) + '</div>'; }).join('') : '');
+    }).join('');
+    var MARK = { yes: '✓', partial: '◐', no: '✗' };
+    var cov = '<table class="cov"><thead><tr><th>Agent</th>' + KIND_ORDER.map(function (k) { return '<th>' + KIND[k] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      R.coverage.map(function (c) {
+        return '<tr><td>' + esc(c.name) + (c.verified ? '' : ' <span class="d">experimental</span>') + '</td>' + KIND_ORDER.map(function (k) {
+          var d = c.detectors.find(function (x) { return x.kind === k; });
+          return '<td class="m-' + d.status + '" title="' + esc(d.missing.length ? 'logs don\'t record: ' + d.missing.join(', ') : 'available') + '">' + MARK[d.status] + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
+    $('#waste-overview').innerHTML = rows + '<div class="hd" style="margin:18px 0 6px"><h2 style="font-size:13px">Which checks could run</h2><span class="hint">a check only runs when the logs contain the data it needs - missing data is never counted as $0 waste</span></div>' + cov;
+  }
+
   function renderAll() {
     renderFlame();
     renderTreemap();
@@ -400,6 +443,7 @@
     renderMix();
   }
   renderAll();
+  renderWasteOverview();
   renderFindings();
   renderSessions();
   renderSmall();
