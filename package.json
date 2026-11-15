@@ -1,6 +1,6 @@
 {
   "name": "@mintwork/tokenscope",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Find the money your AI coding agent wasted: cache rebuilds, loops, re-reads and giant tool outputs, with fixes, plus a flame graph of token spend. Claude Code, Codex, Gemini CLI, OpenCode, Cline, Roo, Copilot CLI and more. Zero dependencies, 100% local.",
   "type": "module",
   "bin": {

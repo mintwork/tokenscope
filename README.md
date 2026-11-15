@@ -36,7 +36,7 @@ npx @mintwork/tokenscope               # waste first, then spend, in the termina
 npx @mintwork/tokenscope --html --open # interactive report with the flame graph
 ```
 
-Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls (the one exception is the opt-in `--update-pricing`). Your logs never leave your machine.
+Needs Node 22+ (22.13+ to read the SQLite databases of OpenCode and Goose). No configuration, no API keys, no network calls (the one exception is the opt-in `--update-pricing`). Your logs never leave your machine.
 
 ## What it finds
 
@@ -61,7 +61,7 @@ Every finding comes with an estimated dollar cost and a one-line fix.
 
 ### The HTML report
 
-`npx @mintwork/tokenscope --html --open` writes one self-contained file: waste by pattern with fixes, which checks ran per agent, and a zoomable flame graph of spend.
+`npx @mintwork/tokenscope --html --open` writes one self-contained file: waste by pattern with fixes, which checks ran per agent, and a zoomable flame graph of spend. It loads nothing from the network, and its Content Security Policy only lets its own bundled script run.
 
 ![tokenscope HTML report: estimated waste by pattern with fixes, plus a flame graph of token spend](docs/demo.png)
 
@@ -97,7 +97,10 @@ The headline (**"could have been saved"**) is the sum of the ✅ rows only. The 
 | Daily / monthly / session spend | ✅ excellent | ✅ |
 | Agents supported | ~19 | 16 (see below) |
 | Live status line, billing blocks | ✅ | ❌ |
-| Waste detection (cache rebuilds, loops, re-reads, giant outputs) | ❌ | ✅ with counterfactual $ estimates and fixes |
+| Waste detection (cache rebuilds, loops, re-reads, giant outputs, failed edits, context bloat, ...) | ❌ | ✅ with counterfactual $ estimates and fixes |
+| What got more wasteful between two periods | ❌ | ✅ `tokenscope diff` |
+| Live waste alerts during a session | ❌ | ✅ `tokenscope watch` (Claude Code) |
+| Fail a CI job when an agent run wastes too much | ❌ | ✅ `--fail-over` |
 | Why a cache miss happened (you paused / long tool / prefix change / model switch) | ❌ | ✅ |
 | Flame graph down to individual tool calls | ❌ | ✅ |
 | Subagent cost attributed to the call that spawned it | ❌ | ✅ |
@@ -187,13 +190,15 @@ npx @mintwork/tokenscope --since 7d                         # last week
 npx @mintwork/tokenscope --source codex,gemini-cli          # just these agents
 npx @mintwork/tokenscope --path opencode=~/backup/opencode  # read from somewhere else
 npx @mintwork/tokenscope -p checkout --html report.html     # one project, as HTML
-npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
+npx @mintwork/tokenscope --json | jq '.totals.avoidableCost' # the headline number, for scripts
 npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
 npx @mintwork/tokenscope diff                               # what got more wasteful this week?
 npx @mintwork/tokenscope --since 30d --compare --json       # last 30 days vs the 30 before, as JSON
 ```
 
 `diff` builds a full report for each range, with the same detectors and prices, and lines them up: spend, the headline waste and its share of spend, likely-avoidable waste, cache hit rate, waste by pattern (cache rebuilds split by cause), the projects that got more or less wasteful, and spend by model. `--json` gives the same diff as data. Sessions that span the boundary are split at it.
+
+Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`, `pi`, `goose`, `kimi`, `aider`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `GOOSE_PATH_ROOT`, `KIMI_SHARE_DIR`, `AIDER_CHAT_HISTORY_FILE`). Aider has no central log store: point `--path aider=<repo or history file>` at your repos.
 
 ### CI mode for headless agent runs
 
@@ -227,7 +232,6 @@ Run tokenscope after an agent runs in CI to gate on waste. Scope the check to th
 
 Exit codes: `0` ok; `1` when the avoidable waste is over the threshold, on errors, or when no session matched the filters.
 
-Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`, `pi`, `goose`, `kimi`, `aider`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `GOOSE_PATH_ROOT`, `KIMI_SHARE_DIR`, `AIDER_CHAT_HISTORY_FILE`). Aider has no central log store: point `--path aider=<repo or history file>` at your repos.
 
 ### Live alerts: `tokenscope watch`
 
@@ -276,11 +280,16 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 ## Roadmap
 
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
+- [ ] Run the four newer detectors on other agents once their log fields are verified (Claude Code only today)
+- [ ] `tokenscope watch` for agents other than Claude Code
+- [ ] More agents: Kimi Code (`~/.kimi-code`); Cursor and Antigravity only if they start keeping per-request logs on disk
+
+Shipped in 0.2.0:
+
 - [x] More agents (experimental): pi, Goose, Kimi CLI, Aider
-- [ ] More agents: Cursor and Antigravity (no local per-request logs), Kimi Code
 - [x] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
 - [x] CI mode for headless agent runs (`--fail-over`, `--summary`, `--session`)
-- [x] More detectors: context bloat before compaction, unused tool definitions, over-thinking on tiny edits, failed-edit retry storms
+- [x] More detectors: failed-edit retry storms, context bloat before compaction, unused tool definitions, over-thinking on tiny edits
 - [x] Diff two time ranges (`tokenscope diff`, `--compare`)
 - [x] Opt-in pricing updates from a published feed (`--update-pricing`)
 
