@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Four new waste detectors**, each with a counterfactual estimate (see "How waste is estimated" in the README).
+  For now they run on Claude Code logs only, and other agents list them as not checked:
+  - *failed-edit retry storms* (avoidable): 3+ consecutive failed edits of the same file. Permission denials and
+    classifier blocks are excluded, and these edits are no longer double-counted as loops;
+  - *context bloat before compaction* (likely avoidable): the saving from compacting at 200k tokens (`--compact-at`)
+    instead of the auto-compact limit, net of the extra compactions;
+  - *unused tool definitions* (likely avoidable): MCP servers whose schemas were sent with every request but never
+    called (needs logs that record each request's tool list);
+  - *over-thinking on tiny edits* (likely avoidable): 8k+ hidden reasoning tokens for an edit of ≤ 1,000 characters.
+- The Claude Code parser now reads compaction events, per-request tool definitions, tool error text (used only for
+  classification, and redacted with `--redact`) and visible output sizes.
 - **CI mode** for headless agent runs: `--fail-over <usd>` exits 1 when the avoidable waste (the headline) exceeds
   the amount, `--summary [file]` writes a compact JSON summary (totals, waste by pattern, top findings, the
   `--fail-over` result), and `--session <ids>` scopes the report to specific sessions (ids or prefixes). The README

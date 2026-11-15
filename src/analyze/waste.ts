@@ -1,8 +1,17 @@
 import type { Pricer } from '../pricing/index.js';
 import type { ApiCall, Capabilities, Session, SourceId, ToolCall } from '../types.js';
-import { CHARS_PER_TOKEN, estTokens } from '../types.js';
+import { CHARS_PER_TOKEN, estTokens, totalTokens } from '../types.js';
 
-export type FindingKind = 'loop' | 'repeat' | 'reread' | 'huge-output' | 'cache-miss';
+export type FindingKind =
+  | 'loop'
+  | 'repeat'
+  | 'reread'
+  | 'huge-output'
+  | 'cache-miss'
+  | 'context-bloat'
+  | 'unused-tools'
+  | 'overthinking'
+  | 'edit-retry';
 export type Severity = 'high' | 'medium' | 'low';
 /**
  * `avoidable`: the same work was clearly redone (identical calls/results, unchanged re-reads).
@@ -11,7 +20,7 @@ export type Severity = 'high' | 'medium' | 'low';
  */
 export type Certainty = 'avoidable' | 'likely-avoidable';
 
-export const ALL_KINDS: FindingKind[] = ['cache-miss', 'loop', 'repeat', 'reread', 'huge-output'];
+export const ALL_KINDS: FindingKind[] = ['cache-miss', 'loop', 'repeat', 'reread', 'huge-output', 'edit-retry', 'context-bloat', 'unused-tools', 'overthinking'];
 
 export const KIND_LABEL: Record<FindingKind, string> = {
   'cache-miss': 'Cache rebuilds',
@@ -19,6 +28,10 @@ export const KIND_LABEL: Record<FindingKind, string> = {
   repeat: 'Repeated calls',
   reread: 'Unchanged re-reads',
   'huge-output': 'Huge tool outputs',
+  'edit-retry': 'Failed-edit retry storms',
+  'context-bloat': 'Context bloat before compaction',
+  'unused-tools': 'Unused tool definitions',
+  overthinking: 'Over-thinking on tiny edits',
 };
 
 /** Data each detector needs. A detector is skipped (and reported as unavailable) otherwise. */
@@ -28,6 +41,10 @@ export const DETECTOR_NEEDS: Record<FindingKind, Array<keyof Capabilities>> = {
   repeat: ['toolCalls', 'toolOutputs'],
   reread: ['toolCalls', 'filePaths', 'toolOutputs'],
   'huge-output': ['toolCalls', 'toolOutputs'],
+  'edit-retry': ['toolCalls', 'toolOutputs', 'filePaths', 'editErrors'],
+  'context-bloat': ['perRequestTokens', 'cacheReads', 'compactions'],
+  'unused-tools': ['perRequestTokens', 'toolCalls', 'toolDefinitions'],
+  overthinking: ['perRequestTokens', 'toolCalls', 'filePaths', 'toolInputs'],
 };
 
 export const CAP_LABEL: Record<keyof Capabilities, string> = {
@@ -38,14 +55,18 @@ export const CAP_LABEL: Record<keyof Capabilities, string> = {
   toolOutputs: 'tool output',
   filePaths: 'file paths',
   timestamps: 'per-request timestamps',
+  compactions: 'compaction events',
+  toolDefinitions: 'tool definitions',
+  toolInputs: 'tool-call input sizes',
+  editErrors: 'recognisable edit errors',
 };
 
 export function detectorAvailable(kind: FindingKind, caps: Capabilities): boolean {
-  return DETECTOR_NEEDS[kind].every((k) => caps[k]);
+  return DETECTOR_NEEDS[kind].every((k) => caps[k] === true);
 }
 
 export function missingFor(kind: FindingKind, caps: Capabilities): string[] {
-  return DETECTOR_NEEDS[kind].filter((k) => !caps[k]).map((k) => CAP_LABEL[k]);
+  return DETECTOR_NEEDS[kind].filter((k) => caps[k] !== true).map((k) => CAP_LABEL[k]);
 }
 
 /** The project-instructions file each agent reads, for tips. */
@@ -98,6 +119,18 @@ export function tipFor(kind: FindingKind, source: SourceId, cause?: CacheCause):
       return `Put the key facts about this file in ${mem} (or a short notes file), or ask for a specific line range instead of re-reading the whole file.`;
     case 'huge-output':
       return `Filter big outputs (head, tail, grep, --limit) and add a rule to ${mem} like "never cat logs or lockfiles; grep them".`;
+    case 'edit-retry':
+      return `After a failed edit, re-read the exact lines before retrying. Add to ${mem}: "if an edit fails twice, re-read the file instead of guessing the text to replace".`;
+    case 'context-bloat':
+      return source === 'claude-code'
+        ? 'Run /compact when you finish a task (or /clear before an unrelated one) instead of letting the context grow to the auto-compact limit; CLAUDE_AUTOCOMPACT_PCT_OVERRIDE makes auto-compaction happen earlier.'
+        : 'Compact (or start a fresh session) when you finish a task instead of letting the context grow to the auto-compact limit.';
+    case 'unused-tools':
+      return 'Disable MCP servers you don\'t use in this project, or let the agent load their tools on demand (tool search / deferred loading) - every request carries the full schemas.';
+    case 'overthinking':
+      return source === 'claude-code'
+        ? 'Use a lower effort level or a thinking budget (MAX_THINKING_TOKENS) for small, well-specified edits; save deep thinking for hard problems.'
+        : 'Use a lower reasoning effort / thinking budget for small, well-specified edits.';
   }
 }
 
@@ -135,6 +168,18 @@ export interface WasteOptions {
   rereadThreshold: number;
   /** Minimum tokens re-written to cache for a call to count as a miss. */
   cacheMissMinTokens: number;
+  /** Consecutive failed edits of one file that count as a retry storm. */
+  editRetryThreshold: number;
+  /** Context size the bloat counterfactual compacts at (and only compactions above 1.5x this are checked). */
+  compactAtTokens: number;
+  /** Tool definitions of one unused MCP server, in tokens, before they are flagged. */
+  unusedToolsMinTokens: number;
+  /** Hidden reasoning tokens on a tiny edit that count as over-thinking. */
+  overthinkTokens: number;
+  /** Reasoning allowance per tiny edit; only tokens above it are counted. */
+  overthinkAllowance: number;
+  /** Largest edit (characters of tool input) considered tiny. */
+  tinyEditChars: number;
 }
 
 export const defaultWasteOptions: WasteOptions = {
@@ -143,7 +188,26 @@ export const defaultWasteOptions: WasteOptions = {
   loopThreshold: 3,
   rereadThreshold: 2,
   cacheMissMinTokens: 5_000,
+  editRetryThreshold: 3,
+  compactAtTokens: 200_000,
+  unusedToolsMinTokens: 1_000,
+  overthinkTokens: 8_000,
+  overthinkAllowance: 2_000,
+  tinyEditChars: 1_000,
 };
+
+/** Error messages of a failed file edit (old text not found / not unique / stale read), across agents. */
+const EDIT_FAILURE =
+  /string to replace not found|old_string|not found in (?:the )?file|has not been read yet|read it first|modified since (?:it was )?(?:last )?read|found \d+ matches|not unique|no changes to make|could not find the (?:string|text)|failed to (?:apply|edit|find)|does not match|search block|patch (?:failed|did not apply)/i;
+/** Failures that are not the agent's mistake: denied permissions, hooks, safety classifiers. */
+const NOT_AGENT_FAILURE = /permission|denied|doesn't want to proceed|rejected|classifier|hook|interrupted/i;
+
+export const isEditFailure = (tc: ToolCall): boolean =>
+  tc.isError && !!tc.errorText && EDIT_FAILURE.test(tc.errorText) && !NOT_AGENT_FAILURE.test(tc.errorText);
+
+/** Prompt size of a request (everything it sent: uncached input + cache reads + cache writes). */
+const promptOf = (c: ApiCall) => c.usage.input + c.usage.cacheRead + c.usage.cacheWrite5m + c.usage.cacheWrite1h;
+const mcpServer = (name: string): string | undefined => name.match(/^mcp__(.+?)__/)?.[1];
 
 const POLLING_TOOLS = new Set(['TaskList', 'TaskOutput', 'BashOutput', 'TaskGet', 'Monitor']);
 
@@ -173,6 +237,11 @@ function severityFor(cost: number, floor: Severity = 'low'): Severity {
 
 const usd = (n: number) => (n < 0.01 ? '<$0.01' : '$' + n.toFixed(2));
 const fmtTok = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n));
+const oneLine = (t: string, n: number) => {
+  // Claude Code wraps tool errors in <tool_use_error>; plain text, never rendered as HTML unescaped
+  const x = t.split('<tool_use_error>').join('').split('</tool_use_error>').join('').replace(/\s+/g, ' ').trim();
+  return x.length > n ? x.slice(0, n - 1) + '…' : x;
+};
 const short = (p: string, n = 60) => (p.length > n ? '…' + p.slice(-(n - 1)) : p);
 
 /** Side statistics that are informative but are NOT waste. */
@@ -193,6 +262,60 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
   for (const root of sessions) {
     const caps = root.caps;
     const can = (k: FindingKind) => detectorAvailable(k, caps);
+
+    // --- unused tool definitions (per session tree) ----------------------------
+    // MCP servers whose tool schemas were sent with every request but never called anywhere in the
+    // session (subagents included). Built-in tools are left out: you can't remove them.
+    if (can('unused-tools')) {
+      const ctxs = contexts(root);
+      const used = new Set<string>();
+      for (const ctx of ctxs) for (const c of ctx.calls) for (const tc of c.toolCalls) used.add(mcpServer(tc.name) ?? '');
+      const per = new Map<string, { tokens: number; tools: number; calls: number; cost: number }>();
+      for (const ctx of ctxs)
+        for (const c of ctx.calls) {
+          const defs = c.toolSet ? ctx.session.toolSets?.[c.toolSet] : undefined;
+          if (!defs) continue;
+          const bySrv = new Map<string, { tokens: number; tools: number }>();
+          for (const d of defs) {
+            const srv = mcpServer(d.name);
+            if (!srv || d.deferred || used.has(srv)) continue;
+            const e = bySrv.get(srv) ?? { tokens: 0, tools: 0 };
+            e.tokens += d.tokens;
+            e.tools++;
+            bySrv.set(srv, e);
+          }
+          const r = bySrv.size ? pricer.rates(c.model, promptOf(c), c.fast) : undefined;
+          if (!r) continue;
+          const u = c.usage;
+          for (const [srv, e] of bySrv) {
+            // tool schemas are the start of the prompt: read from cache when the prefix was cached, else written or sent fresh
+            const rate = u.cacheRead >= e.tokens ? r.cacheRead : u.cacheWrite1h >= e.tokens ? r.cacheWrite1h : u.cacheWrite5m >= e.tokens ? r.cacheWrite5m : r.input;
+            const acc = per.get(srv) ?? { tokens: 0, tools: 0, calls: 0, cost: 0 };
+            acc.tokens = Math.max(acc.tokens, e.tokens);
+            acc.tools = Math.max(acc.tools, e.tools);
+            acc.calls++;
+            acc.cost += (e.tokens * rate) / 1e6;
+            per.set(srv, acc);
+          }
+        }
+      for (const [srv, e] of per) {
+        if (e.tokens < o.unusedToolsMinTokens || e.cost < 0.01) continue;
+        findings.push({
+          kind: 'unused-tools',
+          certainty: 'likely-avoidable',
+          severity: severityFor(e.cost),
+          source: root.source,
+          sessionId: root.id,
+          project: root.project,
+          title: `MCP server "${srv}": ${e.tools} tool definitions (~${fmtTok(e.tokens)} tokens) sent with ${e.calls} requests, never called`,
+          detail: `None of its tools was called in this session (subagents included), but their schemas were part of every request's prompt.`,
+          count: e.calls,
+          tokens: e.tokens * e.calls,
+          cost: e.cost,
+          tip: tipFor('unused-tools', root.source),
+        });
+      }
+    }
     for (const ctx of contexts(root)) {
       const base = {
         source: root.source,
@@ -222,13 +345,15 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
       // identity = same input AND same output: re-running `npm test` after an edit is fine,
       // getting the identical answer back again and again is not.
       const ident = (tc: ToolCall) => tc.key + '#' + (tc.resultHash ?? '');
+      // failed edits are valued by the retry-storm detector, so they're not counted twice
+      const ownedByEditRetry = (tc: ToolCall) => can('edit-retry') && tc.fileOp === 'edit' && isEditFailure(tc);
       if (can('loop')) {
         for (let i = 0; i < ordered.length; ) {
           let j = i + 1;
           while (j < ordered.length && ident(ordered[j].tc) === ident(ordered[i].tc)) j++;
           const run = j - i;
           // file reads are covered by the re-read detector, polling tools are expected to repeat
-          if (run >= o.loopThreshold && !POLLING_TOOLS.has(ordered[i].tc.name) && ordered[i].tc.fileOp !== 'read') {
+          if (run >= o.loopThreshold && !POLLING_TOOLS.has(ordered[i].tc.name) && ordered[i].tc.fileOp !== 'read' && !ownedByEditRetry(ordered[i].tc)) {
             const { tc, call } = ordered[i];
             loopedKeys.add(ident(tc));
             const wastedCalls = ordered.slice(i + 1, j);
@@ -254,7 +379,7 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
       if (can('repeat')) {
         const byKey = new Map<string, Array<{ tc: ToolCall; call: ApiCall }>>();
         for (const x of ordered) {
-          if (x.tc.fileOp === 'read' || loopedKeys.has(ident(x.tc)) || POLLING_TOOLS.has(x.tc.name)) continue;
+          if (x.tc.fileOp === 'read' || loopedKeys.has(ident(x.tc)) || POLLING_TOOLS.has(x.tc.name) || ownedByEditRetry(x.tc)) continue;
           const arr = byKey.get(ident(x.tc)) ?? [];
           arr.push(x);
           byKey.set(ident(x.tc), arr);
@@ -328,6 +453,124 @@ export function detectWaste(sessions: Session[], pricer: Pricer, opts: Partial<W
             title: `${tc.name} returned ~${fmtTok(tokens)} tokens${where}`,
             detail: `${tc.name}(${tc.target ?? '…'}) put a very large result into context; every later request in this context pays to carry it, and it hastens compaction.`,
             count: 1,
+            tokens,
+            cost,
+          });
+        }
+      }
+
+      // --- failed-edit retry storms -------------------------------------------
+      // the same file edited again and again, each attempt failing (text not found, not unique, stale read)
+      if (can('edit-retry')) {
+        const runs = new Map<string, Array<{ tc: ToolCall; call: ApiCall }>>();
+        const flush = (file: string) => {
+          const run = runs.get(file) ?? [];
+          runs.delete(file);
+          if (run.length < o.editRetryThreshold) return;
+          // a good recovery (re-read the lines, then edit) still costs a round trip, so the first two attempts are free
+          const wasted = run.slice(2);
+          const share = (x: { call: ApiCall }) => 1 / Math.max(1, x.call.toolCalls.length);
+          const cost = wasted.reduce((n, x) => n + x.call.cost * share(x), 0);
+          const tokens = wasted.reduce((n, x) => n + Math.round(totalTokens(x.call.usage) * share(x)), 0);
+          push({
+            kind: 'edit-retry',
+            certainty: 'avoidable',
+            severity: severityFor(cost, 'medium'),
+            title: `${short(file)}: ${run.length} failed edits in a row${where}`,
+            detail: `${run[0].tc.name} kept failing on the same file (${oneLine(run[run.length - 1].tc.errorText ?? 'error', 70)}); ${wasted.length} attempt${wasted.length > 1 ? 's' : ''} after the first retry produced nothing.`,
+            count: run.length,
+            tokens,
+            cost,
+          });
+        };
+        for (const x of ordered) {
+          const { tc } = x;
+          if (tc.fileOp !== 'edit' || !tc.file) continue;
+          if (isEditFailure(tc)) runs.set(tc.file, [...(runs.get(tc.file) ?? []), x]);
+          else if (!tc.isError) flush(tc.file); // a successful edit ends the storm; denied permissions don't count either way
+        }
+        for (const file of [...runs.keys()]) flush(file);
+      }
+
+      // --- over-thinking on tiny edits -----------------------------------------
+      // requests whose only visible output is a tiny edit but that billed thousands of hidden reasoning tokens
+      if (can('overthinking')) {
+        let cost = 0;
+        let tokens = 0;
+        let maxHidden = 0;
+        let n = 0;
+        for (const call of ctx.calls) {
+          if (call.visibleChars === undefined || !call.toolCalls.length) continue;
+          if (!call.toolCalls.every((tc) => tc.fileOp === 'edit' && tc.inputChars !== undefined)) continue;
+          if (call.toolCalls.reduce((x, tc) => x + (tc.inputChars ?? 0), 0) > o.tinyEditChars) continue;
+          const hidden = call.usage.output - estTokens(call.visibleChars);
+          if (hidden < o.overthinkTokens) continue;
+          const r = pricer.rates(call.model, promptOf(call), call.fast);
+          if (!r) continue;
+          const extra = hidden - o.overthinkAllowance;
+          n++;
+          tokens += extra;
+          cost += (extra * r.output) / 1e6;
+          maxHidden = Math.max(maxHidden, hidden);
+        }
+        if (n && cost >= 0.01)
+          push({
+            kind: 'overthinking',
+            certainty: 'likely-avoidable',
+            severity: severityFor(cost),
+            title: `${n} tiny edit${n > 1 ? 's' : ''} that took ${n > 1 ? 'up to ' : ''}~${fmtTok(maxHidden)} reasoning tokens${where}`,
+            detail: `Requests whose only output was an edit of at most ${o.tinyEditChars.toLocaleString('en-US')} characters billed ${fmtTok(o.overthinkTokens)}+ hidden reasoning tokens each; counted: the tokens above a ${fmtTok(o.overthinkAllowance)} allowance, at output price.`,
+            count: n,
+            tokens,
+            cost,
+          });
+      }
+
+      // --- context bloat before compaction -------------------------------------
+      // counterfactual: compact when the context first passes `compactAtTokens` (and again each time it
+      // grows back past it) instead of at the auto-compact limit, paying for every extra compaction
+      if (can('context-bloat') && ctx.session.compactions?.length) {
+        const T = o.compactAtTokens;
+        let prevTs = -Infinity;
+        for (const comp of [...ctx.session.compactions].sort((a, b) => a.timestamp - b.timestamp)) {
+          const window = ctx.calls.filter((c) => c.timestamp > prevTs && c.timestamp <= comp.timestamp);
+          prevTs = comp.timestamp;
+          if (comp.pre < T * 1.5 || !comp.post || comp.post >= T / 2 || window.length < 2) continue;
+          let off = 0;
+          let extra = 0;
+          let saved = 0;
+          let compactCost = 0;
+          let tokens = 0;
+          let peak = 0;
+          for (let i = 0; i < window.length; i++) {
+            const c = window[i];
+            const size = promptOf(c);
+            peak = Math.max(peak, size);
+            if (i > 0 && size - off > T) {
+              // compact before this request: summarize the previous context, write the summary, re-cache it
+              const prev = promptOf(window[i - 1]);
+              const r = pricer.rates(c.model, prev, c.fast);
+              if (r) compactCost += (prev * r.cacheRead + comp.post * (r.output + r.cacheWrite5m)) / 1e6;
+              off = Math.max(0, prev - comp.post);
+              extra++;
+            }
+            const lean = Math.max(Math.min(size, comp.post), size - off);
+            if (lean >= size) continue;
+            const ra = pricer.rates(c.model, size, c.fast);
+            const rb = pricer.rates(c.model, lean, c.fast);
+            if (!ra || !rb) continue;
+            saved += (size * ra.cacheRead - lean * rb.cacheRead) / 1e6;
+            tokens += size - lean;
+          }
+          const cost = saved - compactCost;
+          if (cost < 0.01) continue;
+          push({
+            kind: 'context-bloat',
+            certainty: 'likely-avoidable',
+            severity: severityFor(cost),
+            title: `Context grew to ~${fmtTok(peak)} tokens before ${comp.trigger === 'manual' ? 'compaction' : 'auto-compaction'} (to ~${fmtTok(comp.post)})${where}`,
+            detail: `Compacting each time the context passed ${fmtTok(T)} (${extra} compaction${extra > 1 ? 's' : ''} instead of 1) would have carried ~${fmtTok(tokens)} fewer cached tokens: ${usd(saved)} less in cache reads, minus ~${usd(compactCost)} for the extra compactions.`,
+            count: extra,
             tokens,
             cost,
           });

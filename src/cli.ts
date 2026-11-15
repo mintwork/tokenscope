@@ -54,6 +54,7 @@ Sources
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
   --huge <tokens>        tool output size flagged as huge (default 10000)
+  --compact-at <tokens>  context size the context-bloat estimate compacts at (default 200000)
   --top <n>              rows per section in the terminal (default 8)
   --redact               replace prompts, titles, paths and commands with placeholders
   --no-color             disable ANSI colors (also honors NO_COLOR; FORCE_COLOR forces them on)
@@ -160,6 +161,7 @@ async function main(rawArgv: string[]): Promise<number> {
       'codex-dir': { type: 'string' },
       pricing: { type: 'string' },
       huge: { type: 'string' },
+      'compact-at': { type: 'string' },
       top: { type: 'string' },
       redact: { type: 'boolean' },
       'no-color': { type: 'boolean' },
@@ -278,7 +280,10 @@ async function main(rawArgv: string[]): Promise<number> {
     redact: values.redact,
     version: VERSION,
     sourceInfo: Object.fromEntries(parsers.map((p) => [p.id, { name: p.name, verified: p.verified }])),
-    waste: values.huge ? { hugeOutputTokens: Number(values.huge) } : undefined,
+    waste: {
+      ...(values.huge ? { hugeOutputTokens: Number(values.huge) } : {}),
+      ...(values['compact-at'] ? { compactAtTokens: Number(values['compact-at']) } : {}),
+    },
   });
   const elapsed = Date.now() - t0;
 
