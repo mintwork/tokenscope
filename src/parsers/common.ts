@@ -47,6 +47,7 @@ export function newToolCall(id: string, name: string, input: unknown): ToolCall 
     key: name + ':' + stableStringify(input ?? null),
     resultChars: 0,
     isError: false,
+    inputChars: typeof input === 'string' ? input.length : input == null ? 0 : stableStringify(input).length,
   };
   const fa = fileAccess(name, input);
   if (fa) {
@@ -56,10 +57,17 @@ export function newToolCall(id: string, name: string, input: unknown): ToolCall 
   return tc;
 }
 
+/** First 200 characters of an error result, used to classify failures (never shown in reports). */
+export function errorSnippet(output: unknown): string {
+  const t = typeof output === 'string' ? output : Array.isArray(output) ? output.map((b) => (typeof b === 'string' ? b : b?.text ?? '')).join(' ') : stableStringify(output ?? '');
+  return t.slice(0, 200);
+}
+
 export function setResult(tc: ToolCall, output: unknown, isError = false): void {
   tc.resultChars = typeof output === 'string' ? output.length : contentChars(output) || (output == null ? 0 : stableStringify(output).length);
   tc.resultHash = contentHash(output ?? '');
   tc.isError = isError;
+  if (isError) tc.errorText = errorSnippet(output);
 }
 
 /**

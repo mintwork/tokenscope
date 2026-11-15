@@ -101,7 +101,8 @@ describe('buildReport', async () => {
     const t = report.totals;
     expect(t.avoidableCost + t.likelyAvoidableCost).toBeCloseTo(t.wasteCost, 10);
     const claude = report.coverage.find((c) => c.source === 'claude-code')!;
-    expect(claude.detectors.every((d) => d.status === 'yes')).toBe(true);
+    // these fixtures predate request shapes in the logs, so unused tool definitions can't be checked
+    expect(claude.detectors.filter((d) => d.status !== 'yes').map((d) => d.kind)).toEqual(['unused-tools']);
     expect(report.coverage.find((c) => c.source === 'codex')!.detectors.find((d) => d.kind === 'cache-miss')!.status).toBe('yes');
   });
 

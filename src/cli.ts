@@ -2,15 +2,18 @@
 import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { diffRanges, resolveRanges } from './analyze/diff.js';
 import { buildReport, filterByTime } from './analyze/report.js';
+import { exceeds, summarize } from './analyze/summary.js';
+import { openFile } from './open.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
 import { renderDiffTerminal } from './render/diff.js';
+import { usd } from './render/format.js';
 import { renderTerminal } from './render/terminal.js';
+import { runWatch } from './watch.js';
 import type { Session, SourceId } from './types.js';
 import { exists, expandHome, parseWhen } from './util.js';
 
@@ -23,6 +26,9 @@ tokenscope ${VERSION} - find the tokens (and money) your AI coding agent wasted
 Usage
   npx @mintwork/tokenscope [options]
   npx @mintwork/tokenscope diff [--from 14d] [--to 7d] [options]
+  npx @mintwork/tokenscope watch [--session <id>] [-p <text>] [--dir <dir>]
+                         live alerts for the active Claude Code session (cache about to
+                         expire, new loops/re-reads/huge outputs); Ctrl-C to stop
 
 Output
   (default)              terminal summary: waste first, then spend
@@ -42,6 +48,11 @@ Compare two time ranges
   --from <when> / --to <when>
   --compare              with --since: compare that range with the one of equal length just before it
 
+CI / headless runs
+  --session <ids>        only these sessions (comma-separated ids or id prefixes)
+  --fail-over <usd>      exit 1 when the avoidable waste (the headline) exceeds <usd>
+  --summary [file]       compact JSON summary for CI (stdout when no file given)
+
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable), e.g. --path gemini-cli=~/backup/gemini
   --dir <dir>            shorthand for --path claude-code=<dir>
@@ -51,6 +62,7 @@ Sources
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
   --huge <tokens>        tool output size flagged as huge (default 10000)
+  --compact-at <tokens>  context size the context-bloat estimate compacts at (default 200000)
   --top <n>              rows per section in the terminal (default 8)
   --redact               replace prompts, titles, paths and commands with placeholders
   --no-color             disable ANSI colors (also honors NO_COLOR; FORCE_COLOR forces them on)
@@ -62,12 +74,79 @@ function normalizeArgv(argv: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     out.push(argv[i]);
-    if ((argv[i] === '--html' || argv[i] === '--json') && (i + 1 >= argv.length || argv[i + 1].startsWith('-'))) out.push('');
+    if ((argv[i] === '--html' || argv[i] === '--json' || argv[i] === '--summary') && (i + 1 >= argv.length || argv[i + 1].startsWith('-'))) out.push('');
   }
   return out;
 }
 
+const WATCH_HELP = `
+tokenscope watch - live waste alerts for the active Claude Code session
+
+Usage
+  npx @mintwork/tokenscope watch [options]
+
+Tails the most recently active session log (switching when a newer session starts) and prints:
+  - a heads-up ~1 min before the prompt cache expires, and when it has expired, with the
+    tokens the next message will re-write and what that costs over a warm cache
+  - each new waste finding (loops, repeats, unchanged re-reads, huge outputs, cache rebuilds)
+
+Options
+  --session <id>         watch this session (id or prefix) instead of the newest one
+  -p, --project <text>   only sessions whose project name/path contains <text>
+  --dir <dir>            Claude Code projects dir (also --path claude-code=<dir>)
+  --pricing <file>       JSON overrides merged over the built-in pricing table
+  --interval <seconds>   how often to check the log (default 2)
+  --no-color             disable ANSI colors (also honors NO_COLOR)
+`;
+
+async function watchMain(argv: string[]): Promise<number> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: false,
+    options: {
+      session: { type: 'string' },
+      project: { type: 'string', short: 'p' },
+      dir: { type: 'string' },
+      path: { type: 'string', multiple: true },
+      pricing: { type: 'string' },
+      interval: { type: 'string' },
+      'no-color': { type: 'boolean' },
+      help: { type: 'boolean', short: 'h' },
+    },
+  });
+  if (values.help) {
+    process.stdout.write(WATCH_HELP);
+    return 0;
+  }
+  const dirs: string[] = [];
+  for (const spec of values.path ?? []) {
+    const eq = spec.indexOf('=');
+    if (eq < 1 || spec.slice(0, eq) !== 'claude-code') throw new Error(`watch supports Claude Code only: use --path claude-code=<dir> (got "${spec}")`);
+    dirs.push(expandHome(spec.slice(eq + 1)));
+  }
+  if (values.dir) dirs.push(expandHome(values.dir));
+  const parser = parsers.find((p) => p.id === 'claude-code')!;
+  const candidates = dirs.length ? dirs : parser.defaultDirs();
+  const found: string[] = [];
+  for (const d of candidates) if (await exists(d)) found.push(d);
+  if (!found.length) {
+    process.stderr.write(`tokenscope watch: Claude Code directory not found (checked ${candidates.join(', ')}). Use --dir <dir>.\n`);
+    return 1;
+  }
+  const interval = values.interval ? Number(values.interval) : 2;
+  if (!(interval > 0)) throw new Error(`--interval expects seconds > 0, got "${values.interval}"`);
+  return runWatch({
+    dirs: found,
+    pricer: new Pricer(loadPricing(values.pricing)),
+    session: values.session,
+    project: values.project,
+    intervalMs: interval * 1000,
+    color: useColor(values['no-color']),
+  });
+}
+
 async function main(rawArgv: string[]): Promise<number> {
+  if (rawArgv[0] === 'watch') return watchMain(rawArgv.slice(1));
   const diffCmd = rawArgv[0] === 'diff';
   const argv = normalizeArgv(diffCmd ? rawArgv.slice(1) : rawArgv);
   const { values } = parseArgs({
@@ -76,6 +155,9 @@ async function main(rawArgv: string[]): Promise<number> {
     options: {
       html: { type: 'string' },
       json: { type: 'string' },
+      summary: { type: 'string' },
+      session: { type: 'string' },
+      'fail-over': { type: 'string' },
       open: { type: 'boolean' },
       since: { type: 'string' },
       until: { type: 'string' },
@@ -90,6 +172,7 @@ async function main(rawArgv: string[]): Promise<number> {
       'codex-dir': { type: 'string' },
       pricing: { type: 'string' },
       huge: { type: 'string' },
+      'compact-at': { type: 'string' },
       top: { type: 'string' },
       redact: { type: 'boolean' },
       'no-color': { type: 'boolean' },
@@ -106,6 +189,11 @@ async function main(rawArgv: string[]): Promise<number> {
     return 0;
   }
 
+  let failOver: number | undefined;
+  if (values['fail-over'] !== undefined) {
+    failOver = Number(values['fail-over'].replace(/^\$/, ''));
+    if (!values['fail-over'].trim() || !Number.isFinite(failOver) || failOver < 0) throw new Error(`--fail-over expects a dollar amount like 5 or 0.5, got "${values['fail-over']}"`);
+  }
   const until = parseWhen(values.until);
   let since = parseWhen(values.since);
   // diff / --compare: two ranges, loaded once and split later
@@ -119,6 +207,7 @@ async function main(rawArgv: string[]): Promise<number> {
   } else if (values.from || values.to) throw new Error('--from / --to are for `tokenscope diff`; use --since / --until otherwise');
   if (ranges) {
     if (values.html !== undefined) throw new Error('diff has terminal and --json output only');
+    if (values.summary !== undefined || failOver !== undefined) throw new Error('--summary and --fail-over apply to a single report, not to diff / --compare');
     since = ranges.before.start;
   }
 
@@ -201,9 +290,13 @@ async function main(rawArgv: string[]): Promise<number> {
     const q = values.project.toLowerCase();
     sessions = sessions.filter((s) => s.project.toLowerCase().includes(q) || (s.projectPath ?? '').toLowerCase().includes(q));
   }
+  if (values.session) {
+    const ids = values.session.split(',').map((x) => x.trim()).filter(Boolean);
+    sessions = sessions.filter((s) => ids.some((id) => s.id === id || s.id.startsWith(id)));
+  }
   if (!ranges) sessions = filterByTime(sessions, since, until);
   if (!sessions.length) {
-    process.stderr.write(`No sessions matched in ${scanned.join(', ')}.\n`);
+    process.stderr.write(`No sessions matched${values.session ? ` --session ${values.session}` : ''} in ${scanned.join(', ')}.\n`);
     return 1;
   }
 
@@ -212,7 +305,10 @@ async function main(rawArgv: string[]): Promise<number> {
     redact: values.redact,
     version: VERSION,
     sourceInfo: Object.fromEntries(parsers.map((p) => [p.id, { name: p.name, verified: p.verified }])),
-    waste: values.huge ? { hugeOutputTokens: Number(values.huge) } : undefined,
+    waste: {
+      ...(values.huge ? { hugeOutputTokens: Number(values.huge) } : {}),
+      ...(values['compact-at'] ? { compactAtTokens: Number(values['compact-at']) } : {}),
+    },
   };
   if (ranges) {
     const d = diffRanges(sessions, ranges, pricer, buildOpts);
@@ -231,6 +327,7 @@ async function main(rawArgv: string[]): Promise<number> {
   const elapsed = Date.now() - t0;
 
   const jsonFlag = values.json !== undefined;
+  const summaryFlag = values.summary !== undefined;
   const htmlFlag = values.html !== undefined;
 
   if (jsonFlag) {
@@ -238,21 +335,30 @@ async function main(rawArgv: string[]): Promise<number> {
     if (values.json) {
       writeFileSync(values.json, json);
       process.stderr.write(`JSON report written to ${values.json}\n`);
-    } else {
-      process.stdout.write(json + '\n');
-      if (!htmlFlag) return 0;
-    }
+    } else process.stdout.write(json + '\n');
+  }
+  if (summaryFlag) {
+    const json = JSON.stringify(summarize(report, { failOver }), null, 2);
+    if (values.summary) {
+      writeFileSync(values.summary, json);
+      process.stderr.write(`JSON summary written to ${values.summary}\n`);
+    } else process.stdout.write(json + '\n');
   }
   if (htmlFlag) {
     const file = values.html || 'tokenscope-report.html';
     writeFileSync(file, renderHtml(report));
     process.stderr.write(`HTML report written to ${path.resolve(file)}\n`);
-    if (values.open) openFile(path.resolve(file));
-    if (jsonFlag) return 0;
+    if (values.open && !openFile(file)) process.stderr.write(`tokenscope: --open: ${path.resolve(file)} is not a file\n`);
   }
-  if (!jsonFlag) {
+  // terminal report unless a JSON document goes to stdout (or --json was asked for)
+  if (!jsonFlag && !(summaryFlag && !values.summary)) {
     process.stdout.write(renderTerminal(report, { color: useColor(values['no-color']), width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
+  }
+  if (failOver !== undefined) {
+    const msg = `avoidable waste ${usd(report.totals.avoidableCost)} ${exceeds(report, failOver) ? 'exceeds' : 'is within'} --fail-over ${usd(failOver)}`;
+    process.stderr.write(`tokenscope: ${msg}\n`);
+    if (exceeds(report, failOver)) return 1;
   }
   return 0;
 }
@@ -260,12 +366,6 @@ async function main(rawArgv: string[]): Promise<number> {
 function useColor(noColor?: boolean): boolean {
   const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
   return !noColor && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
-}
-
-function openFile(file: string): void {
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', file] : [file];
-  spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
 }
 
 // `tokenscope | head` closes the pipe early - that's fine

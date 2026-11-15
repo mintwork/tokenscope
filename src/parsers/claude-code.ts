@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ApiCall, Session, ToolCall, Turn, Usage } from '../types.js';
-import { FULL_CAPS } from '../types.js';
+import type { ApiCall, Capabilities, Session, ToolCall, ToolDef, Turn, Usage } from '../types.js';
+import { FULL_CAPS, estTokens } from '../types.js';
+import { errorSnippet } from './common.js';
 import { uniq, xdgConfig } from '../paths.js';
 import { contentChars, contentHash, fileAccess, oneLine, parseTime, readJsonl, stableStringify, toolTarget, walk } from '../util.js';
 import type { LoadOptions, Parser } from './types.js';
@@ -19,12 +20,18 @@ import type { LoadOptions, Parser } from './types.js';
  *      cache_creation:{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}}, content:[...]}}
  *   {type:"user", message:{content: string | [{type:"tool_result", tool_use_id, content, is_error}]}}
  *   {type:"ai-title", aiTitle} | {type:"summary", summary}
+ *   {type:"system", subtype:"compact_boundary", compactMetadata:{trigger, preTokens, postTokens}}
+ *   {type:"api-request-shape", shapeHash, shape:{tools:[{name, description, input_schema, defer_loading?}]}}
+ *   {type:"api-request", id, shapeHash}   (assistant lines point at it with `requestRef`; newer versions only)
  *
  * A single API response is streamed into several "assistant" lines (one per
  * content block) that share message.id and repeat the usage - we dedupe on id.
  */
 
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
+
+/** Compactions, tool inputs and edit errors are always in the transcript; tool definitions only in newer versions. */
+export const CLAUDE_CAPS: Capabilities = { ...FULL_CAPS, compactions: true, toolInputs: true, editErrors: true, toolDefinitions: false };
 
 export function claudeDefaultDir(): string {
   const base = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
@@ -87,7 +94,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
   const session: Session = {
     id: path.basename(file, '.jsonl'),
     source: 'claude-code',
-    caps: FULL_CAPS,
+    caps: { ...CLAUDE_CAPS },
     project: slugToName(slug),
     file,
     start: 0,
@@ -97,6 +104,8 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
   const calls = new Map<string, PendingCall>();
   const toolCalls = new Map<string, ToolCall>();
   const agentSpawns = new Map<string, string>();
+  const shapeOf = new Map<string, string>(); // api-request id -> shapeHash
+  const refs: Array<[ApiCall, string]> = [];
   let turn: Turn | undefined;
   let title: string | undefined;
   let summary: string | undefined;
@@ -124,6 +133,23 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
       case 'summary':
         if (typeof e.summary === 'string') summary = e.summary;
         break;
+      case 'system': {
+        const m = e.compactMetadata;
+        if (e.subtype === 'compact_boundary' && m && typeof m.preTokens === 'number')
+          (session.compactions ??= []).push({ timestamp: ts, pre: m.preTokens, post: num(m.postTokens), trigger: typeof m.trigger === 'string' ? m.trigger : undefined });
+        break;
+      }
+      case 'api-request':
+        if (typeof e.id === 'string' && typeof e.shapeHash === 'string') shapeOf.set(e.id, e.shapeHash);
+        break;
+      case 'api-request-shape':
+        if (typeof e.shapeHash === 'string' && Array.isArray(e.shape?.tools)) {
+          const defs: ToolDef[] = e.shape.tools
+            .filter((t: any) => typeof t?.name === 'string')
+            .map((t: any) => ({ name: t.name, tokens: estTokens(JSON.stringify(t).length), deferred: t.defer_loading === true }));
+          (session.toolSets ??= {})[e.shapeHash] = defs;
+        }
+        break;
       case 'user': {
         const content = e.message?.content;
         if (Array.isArray(content)) {
@@ -135,6 +161,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
               if (ts) tc.resultAt = ts;
               tc.resultHash = contentHash(b.content ?? '');
               tc.isError = b.is_error === true;
+              if (tc.isError) tc.errorText = errorSnippet(b.content ?? '');
             }
             const agentId = e.toolUseResult?.agentId;
             if (typeof agentId === 'string') agentSpawns.set(agentId, b.tool_use_id);
@@ -160,6 +187,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
             cost: 0,
           };
           if (m.usage?.speed === 'fast') call.fast = true;
+          if (typeof e.requestRef === 'string') refs.push([call, e.requestRef]);
           pc = { call, turn };
           calls.set(m.id, pc);
           turn.calls.push(call);
@@ -170,7 +198,10 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
         }
         if (Array.isArray(m.content)) {
           for (const b of m.content) {
+            if (b?.type === 'text' && typeof b.text === 'string') pc.call.visibleChars = (pc.call.visibleChars ?? 0) + b.text.length;
             if (b?.type !== 'tool_use' || toolCalls.has(b.id)) continue;
+            const inputChars = stableStringify(b.input ?? null).length;
+            pc.call.visibleChars = (pc.call.visibleChars ?? 0) + inputChars;
             const tc: ToolCall = {
               id: String(b.id),
               name: String(b.name ?? 'unknown'),
@@ -178,6 +209,7 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
               key: String(b.name) + ':' + stableStringify(b.input ?? null),
               resultChars: 0,
               isError: false,
+              inputChars,
             };
             const fa = fileAccess(tc.name, b.input);
             if (fa) {
@@ -193,6 +225,11 @@ export async function parseClaudeFile(file: string, slug: string): Promise<Parse
     }
   }
   session.title = title ?? summary;
+  for (const [call, ref] of refs) {
+    const hash = shapeOf.get(ref);
+    if (hash && session.toolSets?.[hash]) call.toolSet = hash;
+  }
+  session.caps.toolDefinitions = refs.some(([c]) => c.toolSet !== undefined);
   session.turns = session.turns.filter((t) => t.calls.length > 0);
   session.turns.forEach((t, i) => (t.index = i));
   return { session, toolCalls, agentSpawns };
@@ -233,7 +270,7 @@ export const claudeCodeParser: Parser = {
   id: 'claude-code',
   name: 'Claude Code',
   verified: true,
-  caps: FULL_CAPS,
+  caps: CLAUDE_CAPS,
   defaultDirs: () => {
     const dirs = [claudeDefaultDir()];
     // newer installs may also use the XDG config dir
