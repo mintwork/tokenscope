@@ -3,12 +3,16 @@
   'use strict';
   var R = JSON.parse(document.getElementById('ts-data').textContent);
   var $ = function (s, el) { return (el || document).querySelector(s); };
+  // Every value from the report data that goes into an innerHTML string passes through esc(),
+  // including numbers, ids and enum-like fields (class names, style values), so a crafted log can't
+  // inject markup. Attribute values are always double-quoted.
   var esc = function (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
   var usd = function (n) {
+    n = +n; // coerce: a string would pass through toLocaleString unchanged
     if (!n) return '$0.00';
     if (Math.abs(n) < 0.01) return '<$0.01';
     if (Math.abs(n) >= 10000) return '$' + Math.round(n).toLocaleString('en-US');
@@ -20,6 +24,7 @@
     if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
     return String(Math.round(n));
   };
+  var count = function (n) { return esc((+n || 0).toLocaleString('en-US')); };
   var pct = function (n, d) { return (n * 100).toFixed(d == null ? 1 : d) + '%'; };
   var dshort = function (ts) {
     return ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -95,7 +100,7 @@
     ['agent', 'Subagents'], ['text', 'Thinking / text'], ['other', 'Other tools'],
   ];
   function color(n) {
-    if (n.k === 'call' || n.k === 'agent' || n.k === 'more') return 'var(--s-' + (n.g || 'other') + ')';
+    if (n.k === 'call' || n.k === 'agent' || n.k === 'more') return 'var(--s-' + esc(n.g || 'other') + ')';
     return 'var(--lvl-' + Math.min(3, n.depth) + ')';
   }
   $('#flame-legend').innerHTML = GROUPS.map(function (g) {
@@ -118,7 +123,7 @@
       var light = n.k !== 'call' && n.k !== 'agent' && n.k !== 'more';
       var dark = !light && n.g === 'web' && root.getAttribute('data-theme') === 'light';
       var label = w > 34 ? esc(n.n) + (w > 160 ? ' <span style="opacity:.75">' + fmtM(n[metric]) + '</span>' : '') : '';
-      html.push('<div class="n' + (light || dark ? ' l' : '') + '" data-id="' + n.id + '" style="left:' + x.toFixed(2) + 'px;top:' + d * ROW +
+      html.push('<div class="n' + (light || dark ? ' l' : '') + '" data-id="' + esc(n.id) + '" style="left:' + x.toFixed(2) + 'px;top:' + d * ROW +
         'px;width:' + Math.max(0, w - 1).toFixed(2) + 'px;background:' + color(n) + '">' + label + '</div>');
       var cx = x;
       (n.c || []).forEach(function (c) {
@@ -132,7 +137,7 @@
     el.innerHTML = html.join('');
     var crumbs = ancestors(zoom);
     $('#crumbs').innerHTML = crumbs.map(function (n, i) {
-      return (i ? '<span class="sep">›</span>' : '') + '<a data-id="' + n.id + '" title="' + esc(n.n) + '">' + esc(n.n) + '</a>';
+      return (i ? '<span class="sep">›</span>' : '') + '<a data-id="' + esc(n.id) + '" title="' + esc(n.n) + '">' + esc(n.n) + '</a>';
     }).join('');
   }
   function zoomTo(n) { zoom = n; renderFlame(); }
@@ -153,7 +158,7 @@
     var share = R.tree[metric] ? n[metric] / R.tree[metric] : 0;
     var zshare = zoom[metric] ? n[metric] / zoom[metric] : 0;
     showTip('<b>' + esc(n.n) + '</b><div class="v">' + usd(n.v) + ' <span class="m" style="font-size:13px">· ' + tok(n.t) + ' tok</span></div>' +
-      '<div class="m">' + KIND_LABEL[n.k] + ' · ' + pct(share) + ' of total' + (zoom !== R.tree ? ' · ' + pct(zshare) + ' of view' : '') + '</div>' +
+      '<div class="m">' + esc(KIND_LABEL[n.k]) + ' · ' + pct(share) + ' of total' + (zoom !== R.tree ? ' · ' + pct(zshare) + ' of view' : '') + '</div>' +
       (n.d ? '<div style="margin-top:6px">' + esc(n.d) + '</div>' : '') +
       '<div class="m" style="margin-top:6px;font-size:11.5px">click to zoom' + (n.c ? '' : '') + '</div>', e);
   });
@@ -220,7 +225,7 @@
       squarify(kids, pr.x + 1, pr.y + 1, Math.max(0, pr.w - 2), Math.max(0, pr.h - 2)).forEach(function (r) {
         var big = r.w > 90 && r.h > 34;
         var dark = pr.item.color === 'var(--s-web)' && root.getAttribute('data-theme') === 'light';
-        html.push('<div class="tm" data-id="' + r.item.node.id + '" style="left:' + (r.x + 1) + 'px;top:' + (r.y + 1) + 'px;width:' + Math.max(0, r.w - 2) +
+        html.push('<div class="tm" data-id="' + esc(r.item.node.id) + '" style="left:' + (r.x + 1) + 'px;top:' + (r.y + 1) + 'px;width:' + Math.max(0, r.w - 2) +
           'px;height:' + Math.max(0, r.h - 2) + 'px;background:' + pr.item.color + (dark ? ';color:#0b0b0b' : '') + '">' +
           (big ? '<b>' + esc(r.item.node.n) + '</b><span>' + fmtM(r.item.value) + '</span>' : '') + '</div>');
       });
@@ -288,7 +293,7 @@
       var d = filled[+t.dataset.i];
       var u = d.usage;
       showTip('<b>' + new Date(d.name + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + '</b><div class="v">' + usd(d.cost) + '</div>' +
-        '<div class="m">' + d.calls.toLocaleString('en-US') + ' API calls · ' + tok(u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h) + ' tok</div>', e);
+        '<div class="m">' + count(d.calls) + ' API calls · ' + tok(u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h) + ' tok</div>', e);
     };
     el.onmouseleave = hideTip;
   }
@@ -315,7 +320,7 @@
     ];
     var tot = rows.reduce(function (s, r) { return s + r[1]; }, 0) || 1;
     $('#mix').innerHTML = '<div class="mix">' + rows.filter(function (r) { return r[1] / tot > 0.002; }).map(function (r) {
-      return '<div title="' + esc(r[0]) + ' ' + usd(r[1]) + '" style="flex:' + r[1] + ';background:var(' + r[3] + ')"></div>';
+      return '<div title="' + esc(r[0]) + ' ' + usd(r[1]) + '" style="flex:' + esc(r[1]) + ';background:var(' + r[3] + ')"></div>';
     }).join('') + '</div><div class="mixrows">' + rows.map(function (r) {
       return '<i style="background:var(' + r[3] + ')"></i><span>' + r[0] + '</span><span class="num">' + tok(r[2]) + ' tok</span><span class="num"><b>' + usd(r[1]) + '</b> · ' + pct(r[1] / tot, 0) + '</span>';
     }).join('') + '</div>';
@@ -328,13 +333,13 @@
     var counts = {};
     R.findings.forEach(function (f) { counts[f.kind] = (counts[f.kind] || 0) + 1; });
     $('#waste-filters').innerHTML = ['all'].concat(Object.keys(KIND).filter(function (k) { return counts[k]; })).map(function (k) {
-      return '<button data-k="' + k + '" aria-pressed="' + (wasteFilter === k) + '">' + (k === 'all' ? 'All ' + R.findings.length : KIND[k] + ' ' + counts[k]) + '</button>';
+      return '<button data-k="' + esc(k) + '" aria-pressed="' + (wasteFilter === k) + '">' + esc(k === 'all' ? 'All ' + R.findings.length : KIND[k] + ' ' + counts[k]) + '</button>';
     }).join('');
     var list = R.findings.filter(function (f) { return wasteFilter === 'all' || f.kind === wasteFilter; }).slice(0, 200);
     if (!list.length) { $('#findings').innerHTML = '<div class="empty">No waste detected. Your agent is running lean.</div>'; return; }
     $('#findings').innerHTML = '<table><thead><tr><th>Severity</th><th>Type</th><th>Finding</th><th>Project</th><th class="num">Tokens</th><th class="num">Est. cost</th></tr></thead><tbody>' +
       list.map(function (f) {
-        return '<tr class="click" data-s="' + esc(f.sessionId) + '"><td><span class="chip ' + f.severity + '"><i></i>' + f.severity + '</span>' + (f.certainty === 'likely-avoidable' ? '<div class="d">likely</div>' : '') + '</td><td class="kind">' + KIND[f.kind] +
+        return '<tr class="click" data-s="' + esc(f.sessionId) + '"><td><span class="chip ' + esc(f.severity) + '"><i></i>' + esc(f.severity) + '</span>' + (f.certainty === 'likely-avoidable' ? '<div class="d">likely</div>' : '') + '</td><td class="kind">' + esc(KIND[f.kind]) +
           '</td><td><div class="t" title="' + esc(f.title) + '">' + esc(f.title) + '</div><div class="d">' + esc(f.detail) + '</div><div class="tipline">↳ ' + esc(f.tip) + '</div></td><td>' + esc(f.project) +
           '</td><td class="num">' + tok(f.tokens) + '</td><td class="num"><b>' + usd(f.cost) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
@@ -374,8 +379,8 @@
       return '<th data-k="' + c[0] + '"' + (c[2] ? ' class="num"' : '') + '>' + c[1] + (sortKey === c[0] ? (sortDir < 0 ? ' ↓' : ' ↑') : '') + '</th>';
     }).join('') + '</tr></thead><tbody>' + list.map(function (s) {
       return '<tr class="click" data-s="' + esc(s.id) + '"><td class="num"><b>' + usd(s.cost) + '</b></td><td>' + dshort(s.start) + '</td><td>' + esc(s.project) +
-        '</td><td><div class="t" title="' + esc(s.title || s.id) + '">' + esc(s.title || s.id.slice(0, 8)) + '</div><div class="d">' + esc(s.models.join(', ')) + ' · ' + s.turns + ' turns</div></td><td class="num">' +
-        s.calls.toLocaleString('en-US') + '</td><td class="num">' + (s.subagents ? s.subagents + ' · ' + usd(s.subagentCost) : '–') + '</td><td class="num">' + pct(s.cacheHitRate, 0) +
+        '</td><td><div class="t" title="' + esc(s.title || s.id) + '">' + esc(s.title || s.id.slice(0, 8)) + '</div><div class="d">' + esc(s.models.join(', ')) + ' · ' + esc(s.turns) + ' turns</div></td><td class="num">' +
+        count(s.calls) + '</td><td class="num">' + (s.subagents ? esc(s.subagents) + ' · ' + usd(s.subagentCost) : '–') + '</td><td class="num">' + pct(s.cacheHitRate, 0) +
         '</td><td class="num">' + (s.waste === null ? '<span class="d" title="logs lack the data waste checks need">n/a</span>' : s.waste ? usd(s.waste) : '–') + '</td></tr>';
     }).join('') + '</tbody></table>';
   }
@@ -393,12 +398,12 @@
   function renderSmall() {
     $('#models').innerHTML = '<table><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Output</th><th class="num">Cost</th></tr></thead><tbody>' +
       R.byModel.map(function (m) {
-        return '<tr><td>' + esc(m.name) + '</td><td class="num">' + m.calls.toLocaleString('en-US') + '</td><td class="num">' + tok(m.usage.output) + '</td><td class="num"><b>' + usd(m.cost) + '</b></td></tr>';
+        return '<tr><td>' + esc(m.name) + '</td><td class="num">' + count(m.calls) + '</td><td class="num">' + tok(m.usage.output) + '</td><td class="num"><b>' + usd(m.cost) + '</b></td></tr>';
       }).join('') + '</tbody></table>' +
       (R.unknownModels.length ? '<p class="d">No pricing for: ' + esc(R.unknownModels.join(', ')) + ' (counted as $0)</p>' : '');
     $('#tools').innerHTML = '<table><thead><tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Output</th><th class="num">Cost*</th></tr></thead><tbody>' +
       R.byTool.slice(0, 15).map(function (t) {
-        return '<tr><td>' + esc(t.name) + '</td><td class="num">' + t.calls.toLocaleString('en-US') + '</td><td class="num">' + (t.errors || '–') + '</td><td class="num">' + tok(t.resultTokens) + '</td><td class="num"><b>' + usd(t.cost) + '</b></td></tr>';
+        return '<tr><td>' + esc(t.name) + '</td><td class="num">' + count(t.calls) + '</td><td class="num">' + esc(t.errors || '–') + '</td><td class="num">' + tok(t.resultTokens) + '</td><td class="num"><b>' + usd(t.cost) + '</b></td></tr>';
       }).join('') + '</tbody></table>';
   }
 
@@ -423,7 +428,7 @@
       var cov = R.coverage.map(function (c) { return c.detectors.find(function (d) { return d.kind === k; }); });
       var none = cov.every(function (d) { return d && d.status === 'no'; });
       var value = b ? usd(b.cost - b.likelyCost) + (b.likelyCost >= 0.01 ? ' <span class="d">+ ' + usd(b.likelyCost) + ' likely</span>' : '') : none ? 'not checked' : '$0.00';
-      return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + (b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'logs lack the data' : 'none found') + '</div></div>' +
+      return '<div class="wrow"><div class="wname">' + KIND[k] + (b && b.likely ? ' <span class="d">(likely)</span>' : '') + '<div class="d">' + esc(b ? b.n + ' finding' + (b.n > 1 ? 's' : '') : none ? 'logs lack the data' : 'none found') + '</div></div>' +
         '<div class="wbar"><div style="width:' + (b ? Math.max(1, (b.cost / max) * 100) : 0) + '%;background:var(' + KIND_COLOR[k] + ')"></div></div><div class="num"><b>' + value + '</b></div></div>' +
         (b ? Object.keys(b.tips).map(function (k) { return b.tips[k]; }).sort(function (x, y) { return y.cost - x.cost; }).slice(0, 2).map(function (t) { return '<div class="wtip">↳ ' + esc(t.tip) + '</div>'; }).join('') : '');
     }).join('');
@@ -432,7 +437,7 @@
       R.coverage.map(function (c) {
         return '<tr><td>' + esc(c.name) + (c.verified ? '' : ' <span class="d">experimental</span>') + '</td>' + KIND_ORDER.map(function (k) {
           var d = c.detectors.find(function (x) { return x.kind === k; });
-          return '<td class="m-' + d.status + '" title="' + esc(d.missing.length ? 'logs don\'t record: ' + d.missing.join(', ') : 'available') + '">' + MARK[d.status] + '</td>';
+          return '<td class="m-' + esc(d.status) + '" title="' + esc(d.missing.length ? 'logs don\'t record: ' + d.missing.join(', ') : 'available') + '">' + esc(MARK[d.status]) + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</tbody></table>';
     $('#waste-overview').innerHTML = rows + '<div class="hd" style="margin:18px 0 6px"><h2 style="font-size:13px">Which checks could run</h2><span class="hint">a check only runs when the logs contain the data it needs - missing data is never counted as $0 waste</span></div>' + cov;

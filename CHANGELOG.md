@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Security
+
+- HTML report: every log-derived value at an `innerHTML` sink is escaped (numbers, ids and class/style
+  values too), the footer values are escaped server-side, and the page carries a Content Security
+  Policy that only allows its own bundled script (pinned by SHA-256), so injected handlers can't run.
+- `--open` no longer goes through `cmd /c start` on Windows (cmd metacharacters in the path could run
+  commands). It runs `explorer.exe` / `open` / `xdg-open` with the path as one argument and no shell,
+  and only for an existing regular file.
+- CI workflow runs with a read-only `GITHUB_TOKEN` (`permissions: contents: read`).
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed
