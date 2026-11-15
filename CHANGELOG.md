@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
 ### Added
 
 - **`tokenscope diff`** compares two time ranges ("what got more wasteful this week?"): `--from` / `--to` /
@@ -88,5 +90,7 @@ First public release.
 - `FORCE_COLOR` forces ANSI colors when stdout is not a TTY; `COLUMNS` sets the width when it is not a terminal.
 - Zero runtime dependencies, Node 22+, 100% local: no network requests, no telemetry.
 
-[0.1.1]: https://github.com/mintwork/tokenscope/releases/tag/v0.1.1
+[Unreleased]: https://github.com/mintwork/tokenscope/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mintwork/tokenscope/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/mintwork/tokenscope/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mintwork/tokenscope/releases/tag/v0.1.0
