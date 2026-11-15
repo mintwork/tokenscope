@@ -11,6 +11,21 @@ All notable changes to this project are documented here. The format follows
   the amount, `--summary [file]` writes a compact JSON summary (totals, waste by pattern, top findings, the
   `--fail-over` result), and `--session <ids>` scopes the report to specific sessions (ids or prefixes). The README
   has a GitHub Actions example.
+- `tokenscope watch`: tails the active Claude Code session and prints live alerts, each once: a heads-up about a
+  minute before the prompt cache expires, an alert when it has (tokens the next message re-writes and the extra cost
+  over a warm cache; 5-minute or 1-hour TTL), and each new waste finding with its fix. Follows you to newer sessions
+  unless pinned with `--session`; `-p`, `--dir`, `--interval`; Ctrl-C exits cleanly. Polling only, no dependencies.
+
+### Security
+
+- HTML report: every log-derived value at an `innerHTML` sink is escaped (numbers, ids and class/style
+  values too), the footer values are escaped server-side, and the page carries a Content Security
+  Policy that only allows its own bundled script (pinned by SHA-256), so injected handlers can't run.
+- `--open` no longer goes through `cmd /c start` on Windows (cmd metacharacters in the path could run
+  commands). It runs `explorer.exe` / `open` / `xdg-open` with the path as one argument and no shell,
+  and only for an existing regular file.
+- CI workflow runs with a read-only `GITHUB_TOKEN` (`permissions: contents: read`).
+- Model-id normalization strips a trailing `[1m]` without a backtracking regex (CodeQL `js/polynomial-redos`).
 
 ## [0.1.1] - 2026-11-14
 
