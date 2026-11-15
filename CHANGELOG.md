@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **CI mode** for headless agent runs: `--fail-over <usd>` exits 1 when the avoidable waste (the headline) exceeds
+  the amount, `--summary [file]` writes a compact JSON summary (totals, waste by pattern, top findings, the
+  `--fail-over` result), and `--session <ids>` scopes the report to specific sessions (ids or prefixes). The README
+  has a GitHub Actions example.
 - `tokenscope watch`: tails the active Claude Code session and prints live alerts, each once: a heads-up about a
   minute before the prompt cache expires, an alert when it has (tokens the next message re-writes and the extra cost
   over a warm cache; 5-minute or 1-hour TTL), and each new waste finding with its fix. Follows you to newer sessions
