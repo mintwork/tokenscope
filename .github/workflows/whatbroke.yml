@@ -1,0 +1,20 @@
+# When CI fails, whatbroke comments on the pull request with the log lines that weren't in the
+# last passing run. https://github.com/mintwork/whatbroke
+name: whatbroke
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  explain:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-26.04
+    steps:
+      # Pinned to a full commit SHA (immutable); bump it for new releases.
+      - uses: mintwork/whatbroke@f55b72dc7d23682626140a19c8fa82a6a185c219 # v0.1.2
