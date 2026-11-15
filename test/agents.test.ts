@@ -355,7 +355,10 @@ describe('pi parser (experimental)', async () => {
     expect(r.unknownModels).toEqual([]);
     expect(r.findings.find((f) => f.kind === 'reread')).toMatchObject({ sessionId: main.id, count: 2 });
     expect(r.findings.find((f) => f.kind === 'cache-miss')).toMatchObject({ cause: 'pause', count: 1 });
-    expect(r.coverage.find((c) => c.source === 'pi')!.detectors.every((d) => d.status === 'yes')).toBe(true);
+    // the original five detectors run on pi; the four newer ones are Claude Code only for now
+    const pi = r.coverage.find((c) => c.source === 'pi')!.detectors;
+    expect(pi.filter((d) => d.status === 'yes').map((d) => d.kind)).toEqual(['cache-miss', 'loop', 'repeat', 'reread', 'huge-output']);
+    expect(pi.filter((d) => d.status !== 'yes').map((d) => d.kind)).toEqual(['edit-retry', 'context-bloat', 'unused-tools', 'overthinking']);
   });
 });
 

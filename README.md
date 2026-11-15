@@ -51,6 +51,10 @@ Every finding comes with an estimated dollar cost and a one-line fix.
 | **Unchanged re-reads** | The same file (same range) read again with no edit in between. | Put the key facts in `CLAUDE.md` / `AGENTS.md`, or read a line range. | ✅ |
 | **Mid-session prompt changes / model switches** | The cache was rebuilt with no idle gap: instructions or tools changed, compaction ran, or the model switched. | Don't edit instructions or toggle MCP servers mid-session; stick to one model. | ➖ shown separately as *likely avoidable* |
 | **Huge tool outputs** | A single tool result above 10k tokens (configurable), carried by every later request. | `head`, `grep`, `--limit`; "never cat logs or lockfiles". | ➖ shown separately as *likely avoidable* |
+| **Failed-edit retry storms** | Three or more edits of the same file failing in a row (text to replace not found, not unique, file not read). | Re-read the exact lines before retrying; "if an edit fails twice, re-read the file". | ✅ |
+| **Context bloat before compaction** | The context grew far past 200k tokens (e.g. to the 1M limit) before compaction shrank it to a fraction. | `/compact` when a task is done, `/clear` before an unrelated one, or auto-compact earlier. | ➖ shown separately as *likely avoidable* |
+| **Unused tool definitions** | An MCP server's tool schemas sent with every request of a session that never called any of them. | Disable the server for this project, or load its tools on demand (tool search). | ➖ shown separately as *likely avoidable* |
+| **Over-thinking on tiny edits** | A request whose only output was a small edit, but that billed 8k+ hidden reasoning tokens. | Lower effort or a thinking budget for small, well-specified edits. | ➖ shown separately as *likely avoidable* |
 | **Rebuilds after breaks over an hour** | No cache lives that long. | None needed. A fresh session helps only if you're starting an unrelated task. | ❌ not waste, shown for context |
 
 **Plus the spend side:** cost per session, project, model, day and tool, cache hit rate, how much caching saved you, and a **flame graph** (project → session → turn → API call → subagent) you can click to zoom.
@@ -76,6 +80,10 @@ Every number is a **counterfactual**: what the same work would have cost if one 
 - **Rebuilds with no gap** (prompt prefix changed, model switched): the tokens carried over from the previous request × (write price − read price). These are only *likely* avoidable, because compaction or a deliberate model switch may have been worth it, so they're kept out of the headline.
 - **Loops:** the cost of the repeated round trips after the first (their share of each request).
 - **Repeats, unchanged re-reads, huge outputs:** the avoidable tokens (output size ÷ 4) × the price of adding them to the context once, plus the cache reads every later request in that context paid to carry them. Re-reads only count when the file wasn't edited in between and the same range was read.
+- **Failed-edit retry storms** (avoidable): 3+ consecutive failed edits of one file, where the error says the edit itself failed (text not found or not unique, stale or unread file). Permission denials, hooks and safety classifiers don't count, and a successful edit ends the run. The counterfactual is a good recovery after the first failure (re-read the lines, then edit), which still costs one round trip, so the first two attempts are free and each later one counts as its share of its request. Failed edits are not also counted as loops or repeats.
+- **Context bloat before compaction** (likely avoidable): only for compactions that started above 1.5 × 200k tokens (`--compact-at`) and ended below half of it. The counterfactual compacts each time the context passes 200k, to the size the real compaction reached, then lets it grow by the same steps as the real session. The finding is the cache reads saved on the smaller context (at each size's own pricing tier) **minus** the cost of every extra compaction: reading the context once, writing a summary as large as the post-compaction context at output price, and re-caching it. If that isn't positive, there's no finding. It is only *likely* avoidable because earlier compaction can drop context the agent still needed.
+- **Unused tool definitions** (likely avoidable): MCP servers (`mcp__<server>__*`) whose tools were sent with requests but never called anywhere in the session, subagents included. Deferred tools (tool search) and built-in tools are never counted. Each request is charged the schema tokens (JSON size ÷ 4) at the price that request paid for its prompt prefix: a cache read when the prefix was cached, otherwise a cache write or fresh input. Needs logs that record each request's tool list (Claude Code 2.1.3xx and later).
+- **Over-thinking on tiny edits** (likely avoidable): requests whose only output was edits totalling ≤ 1,000 characters, with hidden reasoning (output tokens − visible text and tool input ÷ 4) of 8k tokens or more. Only the reasoning above a 2k-token allowance counts, at output price; a one-line fix can still be the result of hard thinking.
 
 The headline (**"could have been saved"**) is the sum of the ✅ rows only. The likely-avoidable amount is shown next to it, never added in. Each detector only runs on agents whose logs contain the data it needs; anything else is reported as *not checked*, never as $0.
 
@@ -120,6 +128,8 @@ Each parser declares what its log format contains. A waste check only runs when 
 | Kimi CLI | 🧪 experimental | ✅ | ✅ | ✅ | ✅ | `~/.kimi/sessions` (model taken from `config.toml`; Kimi prices not in the table yet) |
 | Aider | 🧪 experimental | ❌ no per-request timestamps; spend only | ❌ no tool calls | ❌ | ❌ | `.aider.chat.history.md` in the current directory |
 
+Failed-edit retries, context bloat, unused tool definitions and over-thinking currently run on Claude Code logs only. Other agents list them as *not checked* until their log fields are verified.
+
 *Experimental* means the parser was built from the agent's source code and docs, cross-checked against other open-source parsers, and tested on synthetic fixtures, but nobody has run it on a real user's logs yet. **If you use one of these agents, please run `npx @mintwork/tokenscope --source <agent>` and [open an issue](.github/ISSUE_TEMPLATE/sample-logs.yml) with a sanitized sample** if the numbers look off. That's how a parser becomes *verified*.
 
 Not supported: **Cursor** keeps usage on its servers (no local per-request log to read without network calls), and **Antigravity** has no plain session log on disk (its usage comes from the running app). Kimi Code (`~/.kimi-code`, a newer format) is not read yet.
@@ -130,6 +140,8 @@ VS Code-family locations are checked for Code, Code - Insiders, Cursor, Windsurf
 
 ```text
 tokenscope [options]
+tokenscope diff [--from 14d] [--to 7d] [options]
+tokenscope watch [options]   live alerts for the active Claude Code session (see below)
 
 Output
   (default)              terminal summary: waste first, then spend
@@ -143,6 +155,16 @@ Filters
   -p, --project <text>   only projects whose name/path contains <text>
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
 
+Compare two time ranges
+  diff                   compare [--from, --to) with [--to, --until or now] (default: the last 7 days vs the 7 before)
+  --from <when> / --to <when>
+  --compare              with --since: compare that range with the one of equal length just before it
+
+CI / headless runs
+  --session <ids>        only these sessions (comma-separated ids or id prefixes)
+  --fail-over <usd>      exit 1 when the avoidable waste (the headline) exceeds <usd>
+  --summary [file]       compact JSON summary for CI (stdout when no file given)
+
 Sources
   --path <id>=<dir>      read agent <id> from <dir> (repeatable)
   --dir <dir>            shorthand for --path claude-code=<dir>
@@ -152,6 +174,7 @@ Sources
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
   --huge <tokens>        tool output size flagged as huge (default 10000)
+  --compact-at <tokens>  context size the context-bloat estimate compacts at (default 200000)
   --top <n>              rows per terminal section (default 8)
   --redact               hide prompts, titles, paths and commands
   --no-color             disable ANSI colors (also honors NO_COLOR; FORCE_COLOR forces them on)
@@ -164,9 +187,62 @@ npx @mintwork/tokenscope --path opencode=~/backup/opencode  # read from somewher
 npx @mintwork/tokenscope -p checkout --html report.html     # one project, as HTML
 npx @mintwork/tokenscope --json | jq '.totals.wasteCost'    # pipe the number into anything
 npx @mintwork/tokenscope --redact --html share.html         # safe to post in Slack
+npx @mintwork/tokenscope diff                               # what got more wasteful this week?
+npx @mintwork/tokenscope --since 30d --compare --json       # last 30 days vs the 30 before, as JSON
 ```
 
+`diff` builds a full report for each range, with the same detectors and prices, and lines them up: spend, the headline waste and its share of spend, likely-avoidable waste, cache hit rate, waste by pattern (cache rebuilds split by cause), the projects that got more or less wasteful, and spend by model. `--json` gives the same diff as data. Sessions that span the boundary are split at it.
+
+### CI mode for headless agent runs
+
+Run tokenscope after an agent runs in CI to gate on waste. Scope the check to the current run with `--session <id>` (Claude Code's `claude -p --output-format json` prints the `session_id`) or `--since <ISO time>` captured before the run. `--fail-over <usd>` exits 1 when the headline (avoidable waste only; *likely avoidable* is never counted) exceeds the amount, and `--summary` writes a small JSON document (totals, waste by pattern, top findings with fixes, and the `failOver` result) instead of the full report.
+
+```yaml
+# .github/workflows/agent.yml (excerpt)
+      - name: Run the agent headless
+        id: agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "Fix the failing tests" --output-format json > agent.json
+          echo "session=$(jq -r .session_id agent.json)" >> "$GITHUB_OUTPUT"
+      - name: Waste check
+        if: always()
+        env:
+          SESSION: ${{ steps.agent.outputs.session }}
+        run: npx -y @mintwork/tokenscope --session "$SESSION" --summary tokenscope.json --html tokenscope.html --fail-over 2
+      - name: Job summary
+        if: always()
+        run: |
+          jq -r '"### tokenscope: ≈ $\(.avoidableCost) avoidable of $\(.cost)\n" +
+            (.topFindings | map("- **\(.kind)** $\(.cost): \(.title)") | join("\n"))' tokenscope.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tokenscope
+          path: tokenscope.*
+```
+
+Exit codes: `0` ok; `1` when the avoidable waste is over the threshold, on errors, or when no session matched the filters.
+
 Agent ids: `claude-code`, `codex`, `gemini-cli`, `qwen-code`, `opencode`, `kilo-cli`, `cline`, `roo-code`, `kilo-code`, `copilot-cli`, `droid`, `amp`, `pi`, `goose`, `kimi`, `aider`. Usual env overrides are honored (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_CLI_HOME`, `QWEN_HOME`, `XDG_DATA_HOME`, `CLINE_DATA_DIR`, `COPILOT_HOME`, `DROID_SESSIONS_DIR`, `AMP_DATA_DIR`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `GOOSE_PATH_ROOT`, `KIMI_SHARE_DIR`, `AIDER_CHAT_HISTORY_FILE`). Aider has no central log store: point `--path aider=<repo or history file>` at your repos.
+
+### Live alerts: `tokenscope watch`
+
+```bash
+npx @mintwork/tokenscope watch                    # the newest Claude Code session; follows you to new ones
+npx @mintwork/tokenscope watch --session 3f2a     # pin one session (id or prefix)
+npx @mintwork/tokenscope watch -p checkout        # newest session in a matching project
+```
+
+```text
+14:02:11 cache expires in ~1 min: ~180k tokens are cached; replying after that re-writes them (~$0.90)
+14:03:12 cache likely expired (5-minute TTL, idle 5 min): the next message re-writes ~180k tokens (~$0.90) instead of reading them from cache
+14:09:40 Bash called 3× in a row, same input & same result - ≈$0.42
+  ↳ Interrupt as soon as the same result comes back twice, ...
+```
+
+It polls the session log every 2 seconds (`--interval <seconds>`; no dependencies, no network), re-reads it when it changes, and prints each alert once: a heads-up about a minute before the prompt cache expires (5 minutes, or 1 hour when the session writes 1h cache), an alert when it has expired (the tokens the next message re-writes, priced as cache write minus cache read for that model), and every new waste finding with its fix. Findings already in the session when you start are summarized in one line. Ctrl-C exits. Claude Code only for now.
 
 ## How costs are computed
 
@@ -191,10 +267,10 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
 - [x] More agents (experimental): pi, Goose, Kimi CLI, Aider
 - [ ] More agents: Cursor and Antigravity (no local per-request logs), Kimi Code
-- [ ] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
-- [ ] CI mode for headless agent runs (`--fail-over 20` dollars of waste)
-- [ ] More detectors: context bloat before compaction, unused tool definitions, over-thinking on trivial turns, failed-edit retry storms
-- [ ] Diff two time ranges ("what got more wasteful this week?")
+- [x] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
+- [x] CI mode for headless agent runs (`--fail-over`, `--summary`, `--session`)
+- [x] More detectors: context bloat before compaction, unused tool definitions, over-thinking on tiny edits, failed-edit retry storms
+- [x] Diff two time ranges (`tokenscope diff`, `--compare`)
 - [ ] Opt-in pricing updates from a published feed
 
 ## Development
