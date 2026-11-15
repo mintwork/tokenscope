@@ -1,0 +1,25 @@
+{"type":"metadata","protocol_version":"1.3"}
+{"timestamp":1793869201,"message":{"type":"TurnBegin","payload":{"user_input":"Make the tests pass"}}}
+{"timestamp":1793869202,"message":{"type":"StepBegin","payload":{"n":1}}}
+{"timestamp":1793869203,"message":{"type":"ToolCall","payload":{"type":"function","id":"tc-1","function":{"name":"Shell","arguments":"{\"command\":\"npm test\"}"}}}}
+{"timestamp":1793869204,"message":{"type":"StatusUpdate","payload":{"context_usage":0.05,"context_tokens":12000,"max_context_tokens":262144,"token_usage":{"input_other":300,"output":60,"input_cache_read":12000,"input_cache_creation":0},"message_id":"msg-1"}}}
+{"timestamp":1793869204,"message":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":300,"output":60,"input_cache_read":12000,"input_cache_creation":0},"message_id":"msg-1"}}}
+{"timestamp":1793869205,"message":{"type":"ToolResult","payload":{"tool_call_id":"tc-1","return_value":{"is_error":true,"output":"FAIL src/parse.test.ts\n  ● parse › handles empty input\n    TypeError: Cannot read properties of undefined\n","message":"Command failed with exit code 1","display":[]}}}}
+{"timestamp":1793869206,"message":{"type":"StepBegin","payload":{"n":2}}}
+{"timestamp":1793869207,"message":{"type":"ToolCall","payload":{"type":"function","id":"tc-2","function":{"name":"Shell","arguments":"{\"command\":\"npm test\"}"}}}}
+{"timestamp":1793869208,"message":{"type":"StatusUpdate","payload":{"context_usage":0.05,"context_tokens":12400,"max_context_tokens":262144,"token_usage":{"input_other":300,"output":60,"input_cache_read":12400,"input_cache_creation":0},"message_id":"msg-2"}}}
+{"timestamp":1793869208,"message":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":300,"output":60,"input_cache_read":12400,"input_cache_creation":0},"message_id":"msg-2"}}}
+{"timestamp":1793869209,"message":{"type":"ToolResult","payload":{"tool_call_id":"tc-2","return_value":{"is_error":true,"output":"FAIL src/parse.test.ts\n  ● parse › handles empty input\n    TypeError: Cannot read properties of undefined\n","message":"Command failed with exit code 1","display":[]}}}}
+{"timestamp":1793869210,"message":{"type":"StepBegin","payload":{"n":3}}}
+{"timestamp":1793869211,"message":{"type":"ToolCall","payload":{"type":"function","id":"tc-3","function":{"name":"Shell","arguments":"{\"command\":\"npm test\"}"}}}}
+{"timestamp":1793869212,"message":{"type":"StatusUpdate","payload":{"context_usage":0.05,"context_tokens":12800,"max_context_tokens":262144,"token_usage":{"input_other":300,"output":60,"input_cache_read":12800,"input_cache_creation":0},"message_id":"msg-3"}}}
+{"timestamp":1793869212,"message":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":300,"output":60,"input_cache_read":12800,"input_cache_creation":0},"message_id":"msg-3"}}}
+{"timestamp":1793869213,"message":{"type":"ToolResult","payload":{"tool_call_id":"tc-3","return_value":{"is_error":true,"output":"FAIL src/parse.test.ts\n  ● parse › handles empty input\n    TypeError: Cannot read properties of undefined\n","message":"Command failed with exit code 1","display":[]}}}}
+{"timestamp":1793869214,"message":{"type":"StepBegin","payload":{"n":4}}}
+{"timestamp":1793869215,"message":{"type":"ToolCall","payload":{"type":"function","id":"tc-4","function":{"name":"Agent","arguments":"{\"description\":\"Find the tokenizer bug\",\"prompt\":\"Look at src/tokenize.ts\"}"}}}}
+{"timestamp":1793869216,"message":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":200,"output":90,"input_cache_read":13200,"input_cache_creation":0},"message_id":"msg-4"}}}
+{"timestamp":1793869217,"message":{"type":"SubagentEvent","payload":{"parent_tool_call_id":"tc-4","agent_id":"ag01","subagent_type":"coder","event":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":5000,"output":100,"input_cache_read":0,"input_cache_creation":0}}}}}}
+{"timestamp":1793869247,"message":{"type":"ToolResult","payload":{"tool_call_id":"tc-4","return_value":{"is_error":false,"output":"tokenize() returns undefined for \"\"","message":"","display":[]}}}}
+{"timestamp":1793869248,"message":{"type":"StepBegin","payload":{"n":5}}}
+{"timestamp":1793869249,"message":{"type":"StatusUpdate","payload":{"token_usage":{"input_other":150,"output":200,"input_cache_read":13600,"input_cache_creation":0},"message_id":"msg-5"}}}
+{"timestamp":1793869250,"message":{"type":"TurnEnd","payload":{}}}

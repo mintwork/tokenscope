@@ -9,6 +9,7 @@ import {
   contexts,
   detectWaste,
   detectorAvailable,
+  isEditFailure,
   missingFor,
   type Finding,
   type FindingKind,
@@ -214,6 +215,8 @@ export function redactSessions(sessions: Session[]): void {
             tc.file = `file-${hash(tc.file)}${ext}`;
           }
           tc.target = tc.file ?? (tc.target ? `#${hash(tc.target)}` : undefined);
+          // error text can quote code; keep only what the edit-retry detector needs
+          if (tc.errorText) tc.errorText = isEditFailure(tc) ? 'failed to edit (details redacted)' : 'error (details redacted)';
           if (tc.subagent) rec(tc.subagent);
         }
     }
@@ -432,9 +435,8 @@ export function buildReport(sessions: Session[], pricer: Pricer, opts: BuildOpti
     coverage: [...covMap.values()]
       .sort((a, b) => b.cost - a.cost)
       .map(({ capsList, ...c }) => {
-        const caps = Object.fromEntries(
-          (Object.keys(capsList[0]) as Array<keyof Capabilities>).map((k) => [k, capsList.every((x) => x[k])]),
-        ) as unknown as Capabilities;
+        const keys = [...new Set(capsList.flatMap((x) => Object.keys(x)))] as Array<keyof Capabilities>;
+        const caps = Object.fromEntries(keys.map((k) => [k, capsList.every((x) => x[k] === true)])) as unknown as Capabilities;
         const detectors: DetectorStatus[] = ALL_KINDS.map((kind) => {
           const n = capsList.filter((x) => detectorAvailable(kind, x)).length;
           const status = n === capsList.length ? 'yes' : n === 0 ? 'no' : 'partial';

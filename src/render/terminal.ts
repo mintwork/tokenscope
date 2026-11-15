@@ -76,7 +76,17 @@ export function renderTerminal(r: Report, o: TermOptions): string {
 
   // ===== WASTE FIRST =====
   const sevPaint: Record<Severity, Paint> = { high: p.red, medium: p.yellow, low: p.dim };
-  const kinds: Record<string, string> = { loop: 'LOOP', repeat: 'REPEAT', reread: 'RE-READ', 'huge-output': 'HUGE OUT', 'cache-miss': 'CACHE' };
+  const kinds: Record<string, string> = {
+    loop: 'LOOP',
+    repeat: 'REPEAT',
+    reread: 'RE-READ',
+    'huge-output': 'HUGE OUT',
+    'cache-miss': 'CACHE',
+    'edit-retry': 'EDIT FAIL',
+    'context-bloat': 'BLOAT',
+    'unused-tools': 'TOOL DEFS',
+    overthinking: 'THINKING',
+  };
   const anyChecked = t.uncheckedSessions < t.sessions;
   if (!anyChecked) {
     line(p.yellow(`Waste could not be estimated: these logs don't record the data the detectors need (see "Waste checks" below).`));
@@ -84,7 +94,7 @@ export function renderTerminal(r: Report, o: TermOptions): string {
     const share = t.cost ? ` of ${usd(t.cost)} spent (${pct(t.avoidableCost / t.cost, 1)})` : '';
     line(`${p.bold(p.orange(`≈ ${usd(t.avoidableCost)}`))} ${p.bold('could have been saved')}${p.dim(share)}`);
     line(p.dim(`  realistic savings only: repeated work + the net gain of a 1-hour cache TTL · estimates`));
-    if (t.likelyAvoidableCost >= 0.01) line(p.dim(`  + up to ${usd(t.likelyAvoidableCost)} more, likely avoidable (mid-session prompt changes, model switches, huge outputs)`));
+    if (t.likelyAvoidableCost >= 0.01) line(p.dim(`  + up to ${usd(t.likelyAvoidableCost)} more, likely avoidable (marked "likely" below, never added in)`));
   } else {
     line(p.green(`No waste patterns found in ${usd(t.cost)} of spend. Nice.`));
   }
@@ -127,15 +137,32 @@ export function renderTerminal(r: Report, o: TermOptions): string {
 
   // which detectors could run, per agent
   h('Waste checks', 'per agent - a detector only runs when the logs contain the data it needs');
-  const short: Record<string, string> = { 'cache-miss': 'cache', loop: 'loops', repeat: 'repeats', reread: 're-reads', 'huge-output': 'huge outputs' };
+  const short: Record<string, string> = {
+    'cache-miss': 'cache',
+    loop: 'loops',
+    repeat: 'repeats',
+    reread: 're-reads',
+    'huge-output': 'huge outputs',
+    'edit-retry': 'edit retries',
+    'context-bloat': 'bloat',
+    'unused-tools': 'tool defs',
+    overthinking: 'thinking',
+  };
   for (const c of r.coverage) {
-    const marks = c.detectors
-      .map((d) => (d.status === 'yes' ? p.green('✓ ') : d.status === 'partial' ? p.yellow('◐ ') : p.red('✗ ')) + short[d.kind])
-      .join('  ');
-    line(`  ${padR(trunc(c.name, 16), 16)} ${marks}${c.verified ? '' : p.dim('  [experimental parser]')}`);
+    const marks = c.detectors.map((d) => (d.status === 'yes' ? p.green('✓ ') : d.status === 'partial' ? p.yellow('◐ ') : p.red('✗ ')) + short[d.kind]);
+    // wrap the marks under the agent name when they don't fit the width
+    const rows: string[][] = [[]];
+    for (const m of marks) {
+      const cur = rows[rows.length - 1];
+      if (cur.length && 19 + vis([...cur, m].join('  ')) > W) rows.push([m]);
+      else cur.push(m);
+    }
+    rows.forEach((row, i) =>
+      line(`  ${padR(i ? '' : trunc(c.name, 16), 16)} ${row.join('  ')}${i === rows.length - 1 && !c.verified ? p.dim('  [experimental parser]') : ''}`),
+    );
     const missing = [...new Set(c.detectors.filter((d) => d.status !== 'yes').flatMap((d) => d.missing))];
     const allNo = c.detectors.filter((d) => d.status !== 'yes').every((d) => d.status === 'no');
-    if (missing.length) line(p.dim(`  ${' '.repeat(17)}${allNo ? "logs don't record" : "some sessions' logs don't record"}: ${missing.join(', ')}`));
+    if (missing.length) line(p.dim(`  ${' '.repeat(17)}${allNo ? 'not in these logs (or not read yet)' : "missing in some sessions' logs"}: ${missing.join(', ')}`));
   }
 
   // ===== THEN SPEND =====

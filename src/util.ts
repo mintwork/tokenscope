@@ -138,10 +138,10 @@ export function shellReadTarget(cmd: string): string | undefined {
 const READ_TOOLS = new Set(['Read', 'read', 'read_file', 'readFile', 'view', 'View', 'ReadFile', 'read_many_files']);
 const EDIT_TOOLS = new Set([
   'Edit', 'edit', 'MultiEdit', 'multiedit', 'Write', 'write', 'NotebookEdit', 'write_file', 'write_to_file', 'edit_file',
-  'create_file', 'Create', 'replace', 'replace_in_file', 'apply_diff', 'insert_content', 'search_and_replace',
+  'create_file', 'Create', 'StrReplaceFile', 'WriteFile', 'replace', 'replace_in_file', 'apply_diff', 'insert_content', 'search_and_replace',
   'str_replace_based_edit_tool', 'str_replace_editor', 'editedExistingFile', 'newFileCreated', 'appliedDiff', 'create', 'ApplyPatch', 'patch',
 ]);
-const SHELL_TOOLS = new Set(['Bash', 'bash', 'shell', 'exec_command', 'local_shell', 'run_shell_command', 'Execute', 'execute_command', 'powershell']);
+const SHELL_TOOLS = new Set(['Bash', 'bash', 'shell', 'exec_command', 'local_shell', 'run_shell_command', 'Execute', 'execute_command', 'powershell', 'Shell']);
 
 /** Classify a tool call as a file read / edit, returning the full path. */
 export function fileAccess(name: string, input: unknown): { file: string; op: 'read' | 'edit' } | undefined {
