@@ -44,7 +44,11 @@ export function loadPricing(file?: string): PricingTable {
 /** "us.anthropic.claude-opus-4-8-20260101-v1:0" -> "claude-opus-4-8" */
 export function normalizeModel(id: string): string {
   let m = id.toLowerCase().trim();
-  m = m.replace(/\[[^\]]*\]$/, ''); // [1m]
+  // trailing "[1m]" - without a regex, which would backtrack polynomially on inputs like "[[[[…"
+  if (m.endsWith(']')) {
+    const open = m.lastIndexOf('[');
+    if (open >= 0 && !m.slice(open + 1, -1).includes(']')) m = m.slice(0, open);
+  }
   m = m.replace(/^(?:[a-z]{2,6}\.)?anthropic\./, ''); // bedrock: us.anthropic. / anthropic.
   m = m.replace(/^(?:anthropic|openai)\//, ''); // openrouter-style
   m = m.replace(/-v\d+(?::\d+)?$/, '');
