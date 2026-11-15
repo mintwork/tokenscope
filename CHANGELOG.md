@@ -35,6 +35,10 @@ All notable changes to this project are documented here. The format follows
   **Kimi CLI** (`~/.kimi/sessions/*/wire.jsonl`, with subagents) and **Aider** (`.aider.chat.history.md`, spend only:
   no per-request timestamps or tool calls, so no waste check runs). Cursor and Antigravity are not supported: neither
   keeps a per-request log on disk.
+- `--update-pricing`: opt-in download of the pricing table published on `main`, strictly validated and cached in
+  the user cache dir; later runs use it only when it is newer than the built-in table (`--no-pricing-cache` to
+  ignore it). The report says which table priced it (`pricingSource` in JSON). This is the only network access
+  tokenscope makes, and it never happens by default.
 
 ### Security
 

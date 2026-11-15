@@ -36,7 +36,7 @@ npx @mintwork/tokenscope               # waste first, then spend, in the termina
 npx @mintwork/tokenscope --html --open # interactive report with the flame graph
 ```
 
-Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls. Your logs never leave your machine.
+Needs Node 22+ (22.13+ to read OpenCode's SQLite database). No configuration, no API keys, no network calls (the one exception is the opt-in `--update-pricing`). Your logs never leave your machine.
 
 ## What it finds
 
@@ -173,6 +173,8 @@ Sources
 
 Tuning
   --pricing <file>       JSON overrides merged over the built-in pricing table
+  --update-pricing       download the latest published pricing table and cache it (opt-in network)
+  --no-pricing-cache     ignore the cached table, use the built-in one
   --huge <tokens>        tool output size flagged as huge (default 10000)
   --compact-at <tokens>  context size the context-bloat estimate compacts at (default 200000)
   --top <n>              rows per terminal section (default 8)
@@ -258,9 +260,18 @@ To update prices, edit `pricing.json` (PRs welcome) or pass your own file:
 npx @mintwork/tokenscope --pricing my-prices.json   # { "models": { "my-model": { "input": 1, "output": 5 } } }
 ```
 
+Prices change faster than releases, so you can also pull the table published on `main` without upgrading:
+
+```bash
+npx @mintwork/tokenscope --update-pricing           # fetch, validate and cache it, then exit
+npx @mintwork/tokenscope --update-pricing --since 7d  # update, then run as usual
+```
+
+This downloads [`src/pricing/pricing.json`](src/pricing/pricing.json) from `raw.githubusercontent.com/mintwork/tokenscope/main`, checks it strictly (dates, multipliers, every price a sane non-negative number, size limit) and caches it in `~/.cache/tokenscope/pricing.json` (`$XDG_CACHE_HOME`, `%LOCALAPPDATA%\tokenscope` on Windows, or `$TOKENSCOPE_CACHE_DIR`). A failed or invalid download keeps the previous cache. Later runs use the cached table only when it is newer than the built-in one, and say so; `--no-pricing-cache` ignores it and `--pricing` still merges on top. `TOKENSCOPE_PRICING_URL` points it at a mirror. **It never fetches unless you pass `--update-pricing`.**
+
 ## Privacy
 
-tokenscope only reads files on your machine and writes the report you ask for. It makes no network requests and sends no telemetry. HTML reports include prompt snippets and file paths unless you pass `--redact`. The test suite uses synthetic fixtures only.
+tokenscope only reads files on your machine and writes the report you ask for. It makes no network requests and sends no telemetry. The only exception is `--update-pricing`, which you must ask for: it downloads the public pricing table (no data is sent) and is never run by default. HTML reports include prompt snippets and file paths unless you pass `--redact`. The test suite uses synthetic fixtures only.
 
 ## Roadmap
 
@@ -271,7 +282,7 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 - [x] CI mode for headless agent runs (`--fail-over`, `--summary`, `--session`)
 - [x] More detectors: context bloat before compaction, unused tool definitions, over-thinking on tiny edits, failed-edit retry storms
 - [x] Diff two time ranges (`tokenscope diff`, `--compare`)
-- [ ] Opt-in pricing updates from a published feed
+- [x] Opt-in pricing updates from a published feed (`--update-pricing`)
 
 ## Development
 
