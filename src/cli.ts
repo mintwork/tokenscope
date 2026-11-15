@@ -2,9 +2,9 @@
 import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { buildReport, filterByTime } from './analyze/report.js';
+import { openFile } from './open.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
@@ -280,7 +280,7 @@ async function main(rawArgv: string[]): Promise<number> {
     const file = values.html || 'tokenscope-report.html';
     writeFileSync(file, renderHtml(report));
     process.stderr.write(`HTML report written to ${path.resolve(file)}\n`);
-    if (values.open) openFile(path.resolve(file));
+    if (values.open && !openFile(file)) process.stderr.write(`tokenscope: --open: ${path.resolve(file)} is not a file\n`);
     if (jsonFlag) return 0;
   }
   if (!jsonFlag) {
@@ -290,12 +290,6 @@ async function main(rawArgv: string[]): Promise<number> {
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
   }
   return 0;
-}
-
-function openFile(file: string): void {
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', file] : [file];
-  spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
 }
 
 // `tokenscope | head` closes the pipe early - that's fine
