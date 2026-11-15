@@ -30,6 +30,11 @@ All notable changes to this project are documented here. The format follows
   minute before the prompt cache expires, an alert when it has (tokens the next message re-writes and the extra cost
   over a warm cache; 5-minute or 1-hour TTL), and each new waste finding with its fix. Follows you to newer sessions
   unless pinned with `--session`; `-p`, `--dir`, `--interval`; Ctrl-C exits cleanly. Polling only, no dependencies.
+- Experimental parsers (built from each agent's source and docs, tested on synthetic fixtures, not yet run on real
+  logs): **pi** coding agent (`~/.pi/agent/sessions`), **Goose** (`sessions.db` usage ledger, SQLite, Node 22.13+),
+  **Kimi CLI** (`~/.kimi/sessions/*/wire.jsonl`, with subagents) and **Aider** (`.aider.chat.history.md`, spend only:
+  no per-request timestamps or tool calls, so no waste check runs). Cursor and Antigravity are not supported: neither
+  keeps a per-request log on disk.
 
 ### Security
 

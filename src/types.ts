@@ -16,7 +16,11 @@ export type SourceId =
   | 'kilo-code'
   | 'copilot-cli'
   | 'droid'
-  | 'amp';
+  | 'amp'
+  | 'pi'
+  | 'goose'
+  | 'kimi'
+  | 'aider';
 
 /**
  * What a log format can tell us. Waste detectors only run when the data they

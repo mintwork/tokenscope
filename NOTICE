@@ -16,7 +16,10 @@ them; all tokenscope parsers are independent TypeScript implementations.
   Factory Droid and OpenCode (node:sqlite read-only access) adapters.
 - splitrail - Copyright (c) 2025 Piebald LLC - MIT License - https://github.com/Piebald-AI/splitrail
   Analyzers for Codex, Gemini CLI, Qwen Code, OpenCode, Cline, Roo Code, Kilo Code and Copilot CLI.
+- tokscale - Copyright (c) 2025 Junho Yeo - MIT License - https://github.com/junhoyeo/tokscale
+  Log locations and field semantics for Kimi CLI and Goose (cross-check only).
 
 Agent sources consulted (formats only): openai/codex, google-gemini/gemini-cli,
 QwenLM/qwen-code, sst/opencode, cline/cline, RooCodeInc/Roo-Code, Kilo-Org/kilocode,
-github/copilot-sdk.
+github/copilot-sdk, earendil-works/pi (MIT), aaif-goose/goose (Apache-2.0),
+MoonshotAI/kimi-cli (Apache-2.0), Aider-AI/aider (Apache-2.0).

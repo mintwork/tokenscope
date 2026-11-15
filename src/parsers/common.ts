@@ -35,7 +35,7 @@ export function newCall(id: string, ts: number, model: string, usage: Partial<Us
   return { id, timestamp: ts, model, usage: { ...emptyUsage(), ...usage }, toolCalls: [], cost: 0 };
 }
 
-const SHELL = new Set(['shell', 'exec_command', 'local_shell', 'run_shell_command', 'bash', 'Bash', 'Execute', 'execute_command']);
+const SHELL = new Set(['shell', 'exec_command', 'local_shell', 'run_shell_command', 'bash', 'Bash', 'Execute', 'execute_command', 'Shell']);
 
 export function newToolCall(id: string, name: string, input: unknown): ToolCall {
   let target = toolTarget(name, input);
