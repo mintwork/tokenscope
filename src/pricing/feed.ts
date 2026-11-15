@@ -94,6 +94,8 @@ export async function updatePricing(url = feedUrl(), file = cachedFeedFile(), ti
   if (!/^https?:\/\//i.test(url)) throw new Error(`pricing feed URL must be http(s): ${url}`);
   let res: Response;
   try {
+    // The pricing feed URL (checked to be http(s) above), which the user can point elsewhere.
+    // nosemgrep
     res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow', headers: { accept: 'application/json' } });
   } catch (err) {
     throw new Error(`could not fetch ${url}: ${err instanceof Error ? err.message : String(err)}`);
