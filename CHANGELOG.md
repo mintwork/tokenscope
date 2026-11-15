@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tokenscope diff`** compares two time ranges ("what got more wasteful this week?"): `--from` / `--to` /
+  `--until`, defaulting to the last 7 days vs the 7 before, or `--since <when> --compare` for the same-length range
+  just before. It lines up spend, the avoidable headline and its share of spend, likely-avoidable waste, cache hit
+  rate, waste by pattern, projects that got more or less wasteful, and spend by model. Output is terminal or `--json`.
 - **Four new waste detectors**, each with a counterfactual estimate (see "How waste is estimated" in the README).
   For now they run on Claude Code logs only, and other agents list them as not checked:
   - *failed-edit retry storms* (avoidable): 3+ consecutive failed edits of the same file. Permission denials and

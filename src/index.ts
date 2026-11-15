@@ -4,6 +4,8 @@ export type { Parser, LoadOptions } from './parsers/index.js';
 export { Pricer, loadPricing, normalizeModel } from './pricing/index.js';
 export { buildReport, filterByTime, redactSessions } from './analyze/report.js';
 export type { Report, SessionSummary, TreeNode } from './analyze/report.js';
+export { diffRanges, diffReports, resolveRanges } from './analyze/diff.js';
+export type { DiffReport } from './analyze/diff.js';
 export { summarize, exceeds } from './analyze/summary.js';
 export type { Summary } from './analyze/summary.js';
 export { detectWaste, defaultWasteOptions } from './analyze/waste.js';

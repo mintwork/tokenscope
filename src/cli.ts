@@ -3,12 +3,14 @@ import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { diffRanges, resolveRanges } from './analyze/diff.js';
 import { buildReport, filterByTime } from './analyze/report.js';
 import { exceeds, summarize } from './analyze/summary.js';
 import { openFile } from './open.js';
 import { parsers } from './parsers/index.js';
 import { Pricer, loadPricing } from './pricing/index.js';
 import { renderHtml } from './render/html.js';
+import { renderDiffTerminal } from './render/diff.js';
 import { usd } from './render/format.js';
 import { renderTerminal } from './render/terminal.js';
 import { runWatch } from './watch.js';
@@ -23,6 +25,7 @@ tokenscope ${VERSION} - find the tokens (and money) your AI coding agent wasted
 
 Usage
   npx @mintwork/tokenscope [options]
+  npx @mintwork/tokenscope diff [--from 14d] [--to 7d] [options]
   npx @mintwork/tokenscope watch [--session <id>] [-p <text>] [--dir <dir>]
                          live alerts for the active Claude Code session (cache about to
                          expire, new loops/re-reads/huge outputs); Ctrl-C to stop
@@ -39,6 +42,11 @@ Filters
   -p, --project <text>   only projects whose name/path contains <text>
   --source <ids>         comma-separated agent ids, or "all" (default: every agent found)
                          ${'${SOURCES}'}
+
+Compare two time ranges
+  diff                   compare [--from, --to) with [--to, --until or now] (default: the last 7 days vs the 7 before)
+  --from <when> / --to <when>
+  --compare              with --since: compare that range with the one of equal length just before it
 
 CI / headless runs
   --session <ids>        only these sessions (comma-separated ids or id prefixes)
@@ -127,20 +135,20 @@ async function watchMain(argv: string[]): Promise<number> {
   }
   const interval = values.interval ? Number(values.interval) : 2;
   if (!(interval > 0)) throw new Error(`--interval expects seconds > 0, got "${values.interval}"`);
-  const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
   return runWatch({
     dirs: found,
     pricer: new Pricer(loadPricing(values.pricing)),
     session: values.session,
     project: values.project,
     intervalMs: interval * 1000,
-    color: !values['no-color'] && !process.env.NO_COLOR && (force || process.stdout.isTTY === true),
+    color: useColor(values['no-color']),
   });
 }
 
 async function main(rawArgv: string[]): Promise<number> {
   if (rawArgv[0] === 'watch') return watchMain(rawArgv.slice(1));
-  const argv = normalizeArgv(rawArgv);
+  const diffCmd = rawArgv[0] === 'diff';
+  const argv = normalizeArgv(diffCmd ? rawArgv.slice(1) : rawArgv);
   const { values } = parseArgs({
     args: argv,
     allowPositionals: false,
@@ -153,6 +161,9 @@ async function main(rawArgv: string[]): Promise<number> {
       open: { type: 'boolean' },
       since: { type: 'string' },
       until: { type: 'string' },
+      from: { type: 'string' },
+      to: { type: 'string' },
+      compare: { type: 'boolean' },
       project: { type: 'string', short: 'p' },
       source: { type: 'string' },
       dir: { type: 'string' },
@@ -178,13 +189,27 @@ async function main(rawArgv: string[]): Promise<number> {
     return 0;
   }
 
-  const since = parseWhen(values.since);
   let failOver: number | undefined;
   if (values['fail-over'] !== undefined) {
     failOver = Number(values['fail-over'].replace(/^\$/, ''));
     if (!values['fail-over'].trim() || !Number.isFinite(failOver) || failOver < 0) throw new Error(`--fail-over expects a dollar amount like 5 or 0.5, got "${values['fail-over']}"`);
   }
   const until = parseWhen(values.until);
+  let since = parseWhen(values.since);
+  // diff / --compare: two ranges, loaded once and split later
+  let ranges: ReturnType<typeof resolveRanges> | undefined;
+  if (diffCmd) {
+    if (values.since) throw new Error('diff takes --from / --to (and optionally --until), not --since');
+    ranges = resolveRanges({ from: parseWhen(values.from), to: parseWhen(values.to), until });
+  } else if (values.compare) {
+    if (since === undefined) throw new Error('--compare needs --since (e.g. --since 7d --compare)');
+    ranges = resolveRanges({ to: since, until });
+  } else if (values.from || values.to) throw new Error('--from / --to are for `tokenscope diff`; use --since / --until otherwise');
+  if (ranges) {
+    if (values.html !== undefined) throw new Error('diff has terminal and --json output only');
+    if (values.summary !== undefined || failOver !== undefined) throw new Error('--summary and --fail-over apply to a single report, not to diff / --compare');
+    since = ranges.before.start;
+  }
 
   const overrides = new Map<SourceId, string[]>();
   const addPath = (id: string, dir: string) => {
@@ -269,14 +294,14 @@ async function main(rawArgv: string[]): Promise<number> {
     const ids = values.session.split(',').map((x) => x.trim()).filter(Boolean);
     sessions = sessions.filter((s) => ids.some((id) => s.id === id || s.id.startsWith(id)));
   }
-  sessions = filterByTime(sessions, since, until);
+  if (!ranges) sessions = filterByTime(sessions, since, until);
   if (!sessions.length) {
     process.stderr.write(`No sessions matched${values.session ? ` --session ${values.session}` : ''} in ${scanned.join(', ')}.\n`);
     return 1;
   }
 
   const pricer = new Pricer(loadPricing(values.pricing));
-  const report = buildReport(sessions, pricer, {
+  const buildOpts = {
     redact: values.redact,
     version: VERSION,
     sourceInfo: Object.fromEntries(parsers.map((p) => [p.id, { name: p.name, verified: p.verified }])),
@@ -284,7 +309,21 @@ async function main(rawArgv: string[]): Promise<number> {
       ...(values.huge ? { hugeOutputTokens: Number(values.huge) } : {}),
       ...(values['compact-at'] ? { compactAtTokens: Number(values['compact-at']) } : {}),
     },
-  });
+  };
+  if (ranges) {
+    const d = diffRanges(sessions, ranges, pricer, buildOpts);
+    if (values.json !== undefined) {
+      const json = JSON.stringify(d, null, 2);
+      if (values.json) {
+        writeFileSync(values.json, json);
+        process.stderr.write(`JSON diff written to ${values.json}\n`);
+      } else process.stdout.write(json + '\n');
+      return 0;
+    }
+    process.stdout.write(renderDiffTerminal(d, { color: useColor(values['no-color']), width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
+    return 0;
+  }
+  const report = buildReport(sessions, pricer, buildOpts);
   const elapsed = Date.now() - t0;
 
   const jsonFlag = values.json !== undefined;
@@ -313,9 +352,7 @@ async function main(rawArgv: string[]): Promise<number> {
   }
   // terminal report unless a JSON document goes to stdout (or --json was asked for)
   if (!jsonFlag && !(summaryFlag && !values.summary)) {
-    const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
-    const color = !values['no-color'] && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
-    process.stdout.write(renderTerminal(report, { color, width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
+    process.stdout.write(renderTerminal(report, { color: useColor(values['no-color']), width: process.stdout.columns ?? (Number(process.env.COLUMNS) || 100), top: Number(values.top ?? 8) }) + '\n');
     process.stderr.write(`scanned ${report.totals.calls.toLocaleString('en-US')} API calls in ${elapsed}ms\n`);
   }
   if (failOver !== undefined) {
@@ -324,6 +361,11 @@ async function main(rawArgv: string[]): Promise<number> {
     if (exceeds(report, failOver)) return 1;
   }
   return 0;
+}
+
+function useColor(noColor?: boolean): boolean {
+  const force = process.env.FORCE_COLOR !== undefined && process.env.FORCE_COLOR !== '0' && process.env.FORCE_COLOR !== 'false';
+  return !noColor && !process.env.NO_COLOR && (force || process.stdout.isTTY === true);
 }
 
 // `tokenscope | head` closes the pipe early - that's fine
