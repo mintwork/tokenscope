@@ -11,6 +11,13 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
+  // The one place the report writes markup. Every value from the report data is passed through
+  // esc() before it's put in an HTML string (see above); test/html-xss.test.ts renders hostile log
+  // content in a real browser to check it comes out as text.
+  var setHtml = function (el, html) {
+    // nosemgrep
+    el.innerHTML = html; // eslint-disable-line no-unsanitized/property
+  };
   var usd = function (n) {
     n = +n; // coerce: a string would pass through toLocaleString unchanged
     if (!n) return '$0.00';
@@ -67,17 +74,17 @@
     { label: 'Cache hit rate', value: pct(T.cacheHitRate), sub: 'saved ' + usd(Math.max(0, T.costWithoutCache - T.cost)) + ' vs uncached' },
     { label: 'Waste findings', value: String(R.findings.length), sub: T.partiallyCheckedSessions ? T.partiallyCheckedSessions + ' sessions only partly checked' : 'all sessions fully checked' },
   ];
-  $('#kpis').innerHTML = kpis.map(function (k) {
+  setHtml($('#kpis'), kpis.map(function (k) {
     return '<div class="kpi ' + (k.cls || '') + '"><div class="label">' + esc(k.label) + '</div><div class="value">' + esc(k.value) +
       '</div><div class="sub">' + esc(k.sub) + '</div></div>';
-  }).join('');
+  }).join(''));
 
   var KIND = { loop: 'Loops', repeat: 'Repeated calls', reread: 'Unchanged re-reads', 'huge-output': 'Huge outputs', 'cache-miss': 'Cache rebuilds', 'edit-retry': 'Failed-edit retries', 'context-bloat': 'Context bloat', 'unused-tools': 'Unused tool defs', overthinking: 'Over-thinking' };
 
   /* ---------- tooltip ---------- */
   var tip = $('#tip');
   function showTip(html, e) {
-    tip.innerHTML = html;
+    setHtml(tip, html);
     tip.style.display = 'block';
     var x = e.clientX + 14, y = e.clientY + 14;
     var w = tip.offsetWidth, h = tip.offsetHeight;
@@ -103,9 +110,9 @@
     if (n.k === 'call' || n.k === 'agent' || n.k === 'more') return 'var(--s-' + esc(n.g || 'other') + ')';
     return 'var(--lvl-' + Math.min(3, n.depth) + ')';
   }
-  $('#flame-legend').innerHTML = GROUPS.map(function (g) {
+  setHtml($('#flame-legend'), GROUPS.map(function (g) {
     return '<span><i style="background:var(--s-' + g[0] + ')"></i>' + g[1] + '</span>';
-  }).join('');
+  }).join(''));
 
   /* ---------- flame graph (icicle) ---------- */
   var zoom = R.tree;
@@ -134,11 +141,11 @@
     }
     lay(zoom, 0, W, 0);
     el.style.height = (maxDepth + 1) * ROW + 'px';
-    el.innerHTML = html.join('');
+    setHtml(el, html.join(''));
     var crumbs = ancestors(zoom);
-    $('#crumbs').innerHTML = crumbs.map(function (n, i) {
+    setHtml($('#crumbs'), crumbs.map(function (n, i) {
       return (i ? '<span class="sep">›</span>' : '') + '<a data-id="' + esc(n.id) + '" title="' + esc(n.n) + '">' + esc(n.n) + '</a>';
-    }).join('');
+    }).join(''));
   }
   function zoomTo(n) { zoom = n; renderFlame(); }
   $('#flame').addEventListener('click', function (e) {
@@ -230,8 +237,8 @@
           (big ? '<b>' + esc(r.item.node.n) + '</b><span>' + fmtM(r.item.value) + '</span>' : '') + '</div>');
       });
     });
-    el.innerHTML = html.join('');
-    $('#treemap-legend').innerHTML = legend.join('');
+    setHtml(el, html.join(''));
+    setHtml($('#treemap-legend'), legend.join(''));
   }
   $('#treemap').addEventListener('mousemove', function (e) {
     var t = e.target.closest('.tm');
@@ -252,7 +259,7 @@
   function renderDaily() {
     var el = $('#daily');
     var days = R.byDay;
-    if (!days.length) { el.innerHTML = '<div class="empty">No dated calls</div>'; return; }
+    if (!days.length) { setHtml(el, '<div class="empty">No dated calls</div>'); return; }
     // fill gaps so the time axis is honest
     var filled = [];
     var byName = {};
@@ -286,7 +293,7 @@
     });
     svg.push('<line x1="' + padL + '" x2="' + W + '" y1="' + (H - padB) + '" y2="' + (H - padB) + '" stroke="' + css('--axis') + '"/>');
     svg.push('</svg>');
-    el.innerHTML = svg.join('');
+    setHtml(el, svg.join(''));
     el.onmousemove = function (e) {
       var t = e.target.closest('.hit');
       if (!t) return hideTip();
@@ -319,11 +326,11 @@
       ['Output', c.output, u.output, '--t-out'],
     ];
     var tot = rows.reduce(function (s, r) { return s + r[1]; }, 0) || 1;
-    $('#mix').innerHTML = '<div class="mix">' + rows.filter(function (r) { return r[1] / tot > 0.002; }).map(function (r) {
+    setHtml($('#mix'), '<div class="mix">' + rows.filter(function (r) { return r[1] / tot > 0.002; }).map(function (r) {
       return '<div title="' + esc(r[0]) + ' ' + usd(r[1]) + '" style="flex:' + esc(r[1]) + ';background:var(' + r[3] + ')"></div>';
     }).join('') + '</div><div class="mixrows">' + rows.map(function (r) {
       return '<i style="background:var(' + r[3] + ')"></i><span>' + r[0] + '</span><span class="num">' + tok(r[2]) + ' tok</span><span class="num"><b>' + usd(r[1]) + '</b> · ' + pct(r[1] / tot, 0) + '</span>';
-    }).join('') + '</div>';
+    }).join('') + '</div>');
   }
 
   /* ---------- tables ---------- */
@@ -332,17 +339,17 @@
   function renderFindings() {
     var counts = {};
     R.findings.forEach(function (f) { counts[f.kind] = (counts[f.kind] || 0) + 1; });
-    $('#waste-filters').innerHTML = ['all'].concat(Object.keys(KIND).filter(function (k) { return counts[k]; })).map(function (k) {
+    setHtml($('#waste-filters'), ['all'].concat(Object.keys(KIND).filter(function (k) { return counts[k]; })).map(function (k) {
       return '<button data-k="' + esc(k) + '" aria-pressed="' + (wasteFilter === k) + '">' + esc(k === 'all' ? 'All ' + R.findings.length : KIND[k] + ' ' + counts[k]) + '</button>';
-    }).join('');
+    }).join(''));
     var list = R.findings.filter(function (f) { return wasteFilter === 'all' || f.kind === wasteFilter; }).slice(0, 200);
-    if (!list.length) { $('#findings').innerHTML = '<div class="empty">No waste detected. Your agent is running lean.</div>'; return; }
-    $('#findings').innerHTML = '<table><thead><tr><th>Severity</th><th>Type</th><th>Finding</th><th>Project</th><th class="num">Tokens</th><th class="num">Est. cost</th></tr></thead><tbody>' +
+    if (!list.length) { setHtml($('#findings'), '<div class="empty">No waste detected. Your agent is running lean.</div>'); return; }
+    setHtml($('#findings'), '<table><thead><tr><th>Severity</th><th>Type</th><th>Finding</th><th>Project</th><th class="num">Tokens</th><th class="num">Est. cost</th></tr></thead><tbody>' +
       list.map(function (f) {
         return '<tr class="click" data-s="' + esc(f.sessionId) + '"><td><span class="chip ' + esc(f.severity) + '"><i></i>' + esc(f.severity) + '</span>' + (f.certainty === 'likely-avoidable' ? '<div class="d">likely</div>' : '') + '</td><td class="kind">' + esc(KIND[f.kind]) +
           '</td><td><div class="t" title="' + esc(f.title) + '">' + esc(f.title) + '</div><div class="d">' + esc(f.detail) + '</div><div class="tipline">↳ ' + esc(f.tip) + '</div></td><td>' + esc(f.project) +
           '</td><td class="num">' + tok(f.tokens) + '</td><td class="num"><b>' + usd(f.cost) + '</b></td></tr>';
-      }).join('') + '</tbody></table>';
+      }).join('') + '</tbody></table>');
   }
   $('#waste-filters').addEventListener('click', function (e) {
     var b = e.target.closest('button');
@@ -375,14 +382,14 @@
       if (typeof x === 'string' || typeof y === 'string') return sortDir * String(x || '').localeCompare(String(y || ''));
       return sortDir * ((x || 0) - (y || 0));
     });
-    $('#sessions').innerHTML = '<table><thead><tr>' + COLS.map(function (c) {
+    setHtml($('#sessions'), '<table><thead><tr>' + COLS.map(function (c) {
       return '<th data-k="' + c[0] + '"' + (c[2] ? ' class="num"' : '') + '>' + c[1] + (sortKey === c[0] ? (sortDir < 0 ? ' ↓' : ' ↑') : '') + '</th>';
     }).join('') + '</tr></thead><tbody>' + list.map(function (s) {
       return '<tr class="click" data-s="' + esc(s.id) + '"><td class="num"><b>' + usd(s.cost) + '</b></td><td>' + dshort(s.start) + '</td><td>' + esc(s.project) +
         '</td><td><div class="t" title="' + esc(s.title || s.id) + '">' + esc(s.title || s.id.slice(0, 8)) + '</div><div class="d">' + esc(s.models.join(', ')) + ' · ' + esc(s.turns) + ' turns</div></td><td class="num">' +
         count(s.calls) + '</td><td class="num">' + (s.subagents ? esc(s.subagents) + ' · ' + usd(s.subagentCost) : '–') + '</td><td class="num">' + pct(s.cacheHitRate, 0) +
         '</td><td class="num">' + (s.waste === null ? '<span class="d" title="logs lack the data waste checks need">n/a</span>' : s.waste ? usd(s.waste) : '–') + '</td></tr>';
-    }).join('') + '</tbody></table>';
+    }).join('') + '</tbody></table>');
   }
   $('#sessions').addEventListener('click', function (e) {
     var th = e.target.closest('th');
@@ -396,15 +403,15 @@
   });
 
   function renderSmall() {
-    $('#models').innerHTML = '<table><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Output</th><th class="num">Cost</th></tr></thead><tbody>' +
+    setHtml($('#models'), '<table><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Output</th><th class="num">Cost</th></tr></thead><tbody>' +
       R.byModel.map(function (m) {
         return '<tr><td>' + esc(m.name) + '</td><td class="num">' + count(m.calls) + '</td><td class="num">' + tok(m.usage.output) + '</td><td class="num"><b>' + usd(m.cost) + '</b></td></tr>';
       }).join('') + '</tbody></table>' +
-      (R.unknownModels.length ? '<p class="d">No pricing for: ' + esc(R.unknownModels.join(', ')) + ' (counted as $0)</p>' : '');
-    $('#tools').innerHTML = '<table><thead><tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Output</th><th class="num">Cost*</th></tr></thead><tbody>' +
+      (R.unknownModels.length ? '<p class="d">No pricing for: ' + esc(R.unknownModels.join(', ')) + ' (counted as $0)</p>' : ''));
+    setHtml($('#tools'), '<table><thead><tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Output</th><th class="num">Cost*</th></tr></thead><tbody>' +
       R.byTool.slice(0, 15).map(function (t) {
         return '<tr><td>' + esc(t.name) + '</td><td class="num">' + count(t.calls) + '</td><td class="num">' + esc(t.errors || '–') + '</td><td class="num">' + tok(t.resultTokens) + '</td><td class="num"><b>' + usd(t.cost) + '</b></td></tr>';
-      }).join('') + '</tbody></table>';
+      }).join('') + '</tbody></table>');
   }
 
   /* ---------- waste overview ---------- */
@@ -440,7 +447,7 @@
           return '<td class="m-' + esc(d.status) + '" title="' + esc(d.missing.length ? 'logs don\'t record: ' + d.missing.join(', ') : 'available') + '">' + esc(MARK[d.status]) + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</tbody></table>';
-    $('#waste-overview').innerHTML = rows + '<div class="hd" style="margin:18px 0 6px"><h2 style="font-size:13px">Which checks could run</h2><span class="hint">a check only runs when the logs contain the data it needs - missing data is never counted as $0 waste</span></div>' + cov;
+    setHtml($('#waste-overview'), rows + '<div class="hd" style="margin:18px 0 6px"><h2 style="font-size:13px">Which checks could run</h2><span class="hint">a check only runs when the logs contain the data it needs - missing data is never counted as $0 waste</span></div>' + cov);
   }
 
   function renderAll() {

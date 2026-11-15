@@ -225,6 +225,8 @@ export async function runWatch(o: RunWatchOptions): Promise<number> {
   let busy = false;
 
   const emit = (alerts: WatchAlert[]) => {
+    // a.kind is a closed union and paint has a color for each kind.
+    // nosemgrep
     for (const a of alerts) write(`${dim(stamp())} ${paint[a.kind](a.text)}`);
   };
   const announce = (s: Session) =>

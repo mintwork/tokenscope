@@ -405,7 +405,8 @@ describe('goose parser (experimental, SQLite)', () => {
   } catch {
     sqlite = undefined;
   }
-  it.skipIf(!sqlite)('reads the usage ledger per request, tools from messages, totals for old sessions', async () => {
+  // Creating the SQLite fixture can take over 5 s on a slow Windows runner (seen in CI).
+  it.skipIf(!sqlite)('reads the usage ledger per request, tools from messages, totals for old sessions', { timeout: 20_000 }, async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'ts-goose-'));
     const db = new sqlite.DatabaseSync(path.join(dir, 'sessions.db'));
     db.exec(readFileSync(fx('goose/sessions.sql'), 'utf8'));

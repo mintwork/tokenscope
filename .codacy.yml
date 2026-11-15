@@ -1,0 +1,5 @@
+# Codacy: paths that don't ship to users. Test fixtures copy agents' real log formats, including
+# truncated JSON and SQLite dumps, on purpose.
+exclude_paths:
+  - "test/fixtures/**"
+  - "scripts/demo-gif.mjs"
