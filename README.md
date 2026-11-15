@@ -279,19 +279,12 @@ tokenscope only reads files on your machine and writes the report you ask for. I
 
 ## Roadmap
 
+Shipped features are in the [CHANGELOG](CHANGELOG.md).
+
 - [ ] Verify the experimental parsers on real logs (please send sanitized samples)
 - [ ] Run the four newer detectors on other agents once their log fields are verified (Claude Code only today)
 - [ ] `tokenscope watch` for agents other than Claude Code
 - [ ] More agents: Kimi Code (`~/.kimi-code`); Cursor and Antigravity only if they start keeping per-request logs on disk
-
-Shipped in 0.2.0:
-
-- [x] More agents (experimental): pi, Goose, Kimi CLI, Aider
-- [x] `tokenscope watch`: live waste alerts for the current session ("cache expired: this message will cost $4")
-- [x] CI mode for headless agent runs (`--fail-over`, `--summary`, `--session`)
-- [x] More detectors: failed-edit retry storms, context bloat before compaction, unused tool definitions, over-thinking on tiny edits
-- [x] Diff two time ranges (`tokenscope diff`, `--compare`)
-- [x] Opt-in pricing updates from a published feed (`--update-pricing`)
 
 ## Development
 
